@@ -1,10 +1,10 @@
 # Instamart Customer Intelligence & Support Copilot
 
-## 1. Project Overview
+## 1. Overview
 
-The **Instamart Customer Intelligence & Support Copilot** is a data analytics and AI-assisted customer support project. It combines data cleaning, SQL analysis, customer segmentation, lapse prediction, support ticket classification, policy question answering, and a simulated refund-agent workflow.
+The Instamart Customer Intelligence & Support Copilot is a data analytics and AI-assisted customer support project. It combines data cleaning, SQL analysis, customer segmentation, lapse prediction, support ticket classification, policy question answering, and a simulated refund-agent workflow.
 
-The project is designed to demonstrate how data analytics and language-model-assisted workflows can help an online grocery business understand its customers, identify retention opportunities, classify support requests, retrieve relevant policies, and handle refund scenarios safely.
+The project demonstrates how data analytics and language-model-assisted workflows can help an online grocery business understand customers, identify retention opportunities, classify support requests, retrieve relevant policies, and handle refund scenarios safely.
 
 ### Project objectives
 
@@ -16,7 +16,7 @@ The project is designed to demonstrate how data analytics and language-model-ass
 - Evaluate policy question answering with and without overlapping text chunks.
 - Demonstrate a simulated refund agent with policy checks, fallback handling, and crash/resume behaviour.
 
-## 2. Technology Stack
+### Technology stack
 
 - **Language:** Python
 - **Data analysis:** pandas, NumPy
@@ -27,9 +27,9 @@ The project is designed to demonstrate how data analytics and language-model-ass
 - **Development environment:** Visual Studio Code
 - **Version control:** Git and GitHub
 
-Install the project's dependencies using `requirements.txt`.
+Install project dependencies using `requirements.txt`.
 
-## 3. Project Structure
+### Project structure
 
 The main project files are organised as follows. Some files under `data/` and `outputs/` are generated when the scripts run.
 
@@ -53,6 +53,7 @@ Instamart-Capstone/
 │   ├── policies/
 │   └── instamart.db
 ├── outputs/
+│   ├── customer_segments.csv
 │   ├── lapse_model.joblib
 │   ├── retention_list.csv
 │   ├── triage_results.csv
@@ -60,7 +61,10 @@ Instamart-Capstone/
 │   ├── triage_metrics.txt
 │   ├── policy_eval_results.csv
 │   ├── policy_eval_zero_overlap.csv
-│   └── agent_runs.jsonl
+│   ├── agent_runs.jsonl
+│   └── refund_ledger.jsonl
+├── state/
+│   └── Agent state and checkpoint JSON files
 ├── sql/
 │   └── queries.sql
 ├── src/
@@ -86,17 +90,17 @@ Instamart-Capstone/
 └── README.md
 ```
 
-The tree illustrates the main files and expected generated outputs. The precise files present can vary depending on which scripts have been run.
+This tree illustrates the main files and expected generated outputs. The precise files present can vary depending on which scripts have been run.
 
-## 4. Setup and Reproduction
+## 2. Reproduce
 
-### 4.1 Prerequisites
+### 2.1 Prerequisites
 
-Install Python and Git, then open the project folder in VS Code.
+Install Python and Git, then open the project folder in Visual Studio Code.
 
 Open the VS Code terminal and navigate to the project directory.
 
-### 4.2 Create and activate a virtual environment
+### 2.2 Create and activate a virtual environment
 
 On Windows PowerShell:
 
@@ -111,7 +115,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
 ```
 
-Install dependencies:
+Install dependencies and check the environment:
 
 ```powershell
 python -m pip install --upgrade pip
@@ -125,16 +129,16 @@ The final dependency check completed successfully in the tested environment, rep
 No broken requirements found.
 ```
 
-### 4.3 Generate and audit the data
+### 2.3 Generate and audit the data
 
-Run these commands in order when reproducing the project from its generated raw data:
+Run these commands in order when reproducing the project from generated raw data:
 
 ```powershell
 python .\generate_data.py
 python .\src\audit_data.py
 ```
 
-### 4.4 Clean and validate the data
+### 2.4 Clean and validate the data
 
 ```powershell
 python .\src\clean_customers.py
@@ -145,14 +149,14 @@ python .\src\validate_data.py
 
 The validation script completed with **53 checks passed and 0 failed** in the tested project copy.
 
-### 4.5 Build the database and run SQL analysis
+### 2.5 Build the database and run SQL analysis
 
 ```powershell
 python .\src\build_database.py
 python .\src\sql_analysis.py
 ```
 
-### 4.6 Run customer analytics
+### 2.6 Run customer analytics and lapse prediction
 
 ```powershell
 python .\src\customer_intelligence.py
@@ -160,7 +164,7 @@ python .\src\customer_insights.py
 python .\src\lapse_model.py
 ```
 
-### 4.7 Run support-ticket processing and triage
+### 2.7 Run support-ticket processing and triage
 
 ```powershell
 python .\src\process_tickets.py
@@ -168,13 +172,13 @@ python .\src\classify_tickets.py
 python .\src\triage_pipeline.py
 ```
 
-### 4.8 Run policy question answering
+### 2.8 Run policy question answering
 
 ```powershell
 python .\src\policy_qa.py
 ```
 
-### 4.9 Run refund-agent demonstrations
+### 2.9 Run refund-agent demonstrations
 
 Run the batch scenarios:
 
@@ -194,11 +198,11 @@ Run the crash/resume demonstration:
 python .\src\refund_agent.py --resume-demo
 ```
 
-These commands demonstrate the tested workflows. Follow the actual script outputs if any generated filenames or behaviour differ in another environment.
+These commands demonstrate the tested workflows. Follow the actual script outputs if generated filenames or behaviour differ in another environment.
 
-## 5. Part A — Data Quality and SQL Analytics
+## 3. Part A — Data Quality and SQL Analytics
 
-### 5.1 Dataset summary
+### 3.1 Dataset summary
 
 The generated dataset contains the following records:
 
@@ -212,7 +216,7 @@ The generated dataset contains the following records:
 
 The order-cleaning process reduced the raw dataset from 13,084 rows to 12,309 cleaned orders.
 
-### 5.2 Data quality findings
+### 3.2 Data quality findings
 
 The raw data audit identified several data quality issues:
 
@@ -241,32 +245,31 @@ Specific raw-data findings included:
 
 These counts describe the raw-data audit. They are not necessarily counts of unresolved issues in the cleaned data.
 
-### 5.3 Cleaned data validation
+### 3.3 Cleaned data validation
 
 The validation script reported:
 
-- Customers: 1,200 rows, 5 columns, no missing values, and no duplicate rows.
-- Products: 40 rows, 4 columns, no missing values, and no duplicate rows.
-- Orders: 12,309 rows and 9 columns.
-- Completed orders: 11,110.
-- Cancelled orders: 1,199.
-- Missing delivery times in cleaned orders: 1,199, corresponding to cancelled orders.
+- **Customers:** 1,200 rows, 5 columns, no missing values, and no duplicate rows.
+- **Products:** 40 rows, 4 columns, no missing values, and no duplicate rows.
+- **Orders:** 12,309 rows and 9 columns.
+- **Completed orders:** 11,110.
+- **Cancelled orders:** 1,199.
+- **Missing delivery times in cleaned orders:** 1,199, corresponding to cancelled orders.
+- **Validation result:** 53 passed, 0 failed.
 
-**Validation result: 53 passed, 0 failed.**
-
-### 5.4 SQLite database
+### 3.4 SQLite database
 
 The project creates `data/instamart.db` with three main tables:
 
 | Table | Rows |
 |---|---:|
-| customers | 1,200 |
-| products | 40 |
-| orders | 12,309 |
+| `customers` | 1,200 |
+| `products` | 40 |
+| `orders` | 12,309 |
 
 The database allows customer, product, and order data to be analysed together using SQL.
 
-### 5.5 Sales and order findings
+### 3.5 Sales and order findings
 
 Recorded spending across completed orders was **₹2,998,668.80**.
 
@@ -317,9 +320,9 @@ For completed orders:
 
 The positive skewness indicates that the order amount distribution has a long upper tail. The 897 observations above the IQR upper fence are statistical outliers, not necessarily data errors.
 
-The correlation between order amount and discount percentage was approximately **−0.095**, indicating a weak negative linear relationship in this dataset. Correlation alone does not establish that discounts caused lower order amounts.
+The correlation between order amount and discount percentage was approximately −0.095, indicating a weak negative linear relationship in this dataset. Correlation alone does not establish that discounts caused lower order amounts.
 
-### 5.6 SQL query analysis
+### 3.6 SQL query analysis
 
 The SQL analysis script ran seven query groups successfully:
 
@@ -337,9 +340,9 @@ The analysis covers business questions such as sales summaries, product performa
 
 The running-revenue analysis ended at ₹2,998,668.80, matching the recorded completed-order spending.
 
-## 6. Part B — Customer Intelligence and Lapse Prediction
+## 4. Part B — Customer Intelligence and Lapse Prediction
 
-### 6.1 Customer segmentation
+### 4.1 Customer segmentation
 
 The customer intelligence script generated four customer segments.
 
@@ -371,11 +374,11 @@ The results suggest several possible business actions:
 
 These are analytical recommendations, not evidence that a particular campaign will necessarily improve retention.
 
-### 6.2 RFM segmentation and lapse prediction
+### 4.2 RFM segmentation and lapse prediction
 
 The lapse modelling workflow uses recency, frequency, and monetary behaviour, together with additional customer/order features, to explore customer lapse risk.
 
-The tested snapshot date was **1 October 2025**, with a lapse cutoff of **1 September 2025**.
+The tested snapshot date was 1 October 2025, with a lapse cutoff of 1 September 2025.
 
 The analysis used:
 
@@ -396,9 +399,9 @@ The analysis used:
 | Frequent | 419 | 9.13 | 19.40 | 3,410.02 |
 | Developing | 183 | 109.28 | 2.21 | 707.33 |
 
-The clustering comparison evaluated values of k from 2 through 8. The best silhouette score in that comparison was **0.5288 at k = 4**. The four-segment solution was used for the reported segmentation.
+The clustering comparison evaluated values of *k* from 2 through 8. The best silhouette score in that comparison was 0.5288 at *k* = 4. The four-segment solution was used for the reported segmentation.
 
-### 6.3 Model comparison
+### 4.3 Model comparison
 
 The tested models included a baseline, logistic regression, and random forest.
 
@@ -420,27 +423,23 @@ The random forest's leading feature importances included frequency (0.2875), mon
 
 The results are specific to this generated dataset and evaluation split. They should not be interpreted as guaranteed performance on real customers.
 
-### 6.4 Retention output
+### 4.4 Retention output
 
 The script saved the model to:
 
-```text
-outputs/lapse_model.joblib
-```
+`outputs/lapse_model.joblib`
 
 It also saved the retention list to:
 
-```text
-outputs/retention_list.csv
-```
+`outputs/retention_list.csv`
 
 The model reload check reported identical predictions after saving and reloading.
 
 **Important limitation:** The reported Premium segment labels use RFM information from the full observation window, including September, whereas the lapse model features use information before the cutoff and exclude the segment label. The retention list is a demonstration output, not a validated production targeting list.
 
-## 7. Part C — Support Ticket Processing and Triage
+## 5. Part C — Support Ticket Processing and Triage
 
-### 7.1 Ticket preprocessing
+### 5.1 Ticket preprocessing
 
 The raw support-ticket dataset contains 164 tickets.
 
@@ -451,23 +450,19 @@ The preprocessing script reported:
 | Ready for classification | 160 |
 | Manual review due to missing text | 4 |
 | Priority fraud-review tickets | 39 |
-| **Total** | **164** |
+| Total | 164 |
 
 The script saved the processed data to:
 
-```text
-data/clean/processed_tickets.csv
-```
+`data/clean/processed_tickets.csv`
 
 Preprocessing creates a redacted text field for downstream processing and routes tickets according to the implemented rules. The original raw dataset should be preserved for traceability.
 
-### 7.2 Ticket classification
+### 5.2 Ticket classification
 
 The classification script saved:
 
-```text
-data/clean/classified_tickets.csv
-```
+`data/clean/classified_tickets.csv`
 
 Reported classification statuses:
 
@@ -493,7 +488,7 @@ Predicted categories:
 
 The output checks passed. Tickets flagged for invalid output, excessive length, or missing text require appropriate review rather than being treated as reliably classified.
 
-### 7.3 Zero-shot and few-shot triage comparison
+### 5.3 Zero-shot and few-shot triage comparison
 
 The triage pipeline compared zero-shot and few-shot classification.
 
@@ -509,17 +504,15 @@ In this experiment, few-shot classification produced higher accuracy at a greate
 
 These results describe the recorded evaluation and should not be assumed to generalise to other ticket distributions or language models.
 
-### 7.4 Token budget and final routing
+### 5.4 Token budget and final routing
 
 The demonstration used a token budget of 6,000 and reported 80 budget-exhausted tickets.
 
 Generated files:
 
-```text
-outputs/triage_budget_demo.csv
-outputs/triage_results.csv
-outputs/triage_metrics.txt
-```
+- `outputs/triage_budget_demo.csv`
+- `outputs/triage_results.csv`
+- `outputs/triage_metrics.txt`
 
 The final few-shot output contained 164 rows, with these reported routes:
 
@@ -535,9 +528,9 @@ The PII audit detected 278 matches before redaction across email, phone, and ord
 
 Pattern-based redaction is not a guarantee that all personally identifiable information will be detected. Production systems would need stronger privacy testing and access controls.
 
-## 8. Part D — Policy Question Answering
+## 6. Part D — Policy QA and Simulated Refund Agent
 
-### 8.1 Approach
+### 6.1 Policy question answering approach
 
 The policy QA workflow loads policy documents, splits them into text chunks, retrieves relevant chunks for a question, and evaluates the answer against the expected document and expected fact.
 
@@ -559,7 +552,7 @@ The chunk distribution was:
 | Refund | 4 |
 | **Total** | **15** |
 
-### 8.2 Main evaluation results
+### 6.2 Policy QA main evaluation results
 
 The evaluation contained 14 questions: 12 answerable questions and 2 unanswerable questions.
 
@@ -572,7 +565,7 @@ The evaluation contained 14 questions: 12 answerable questions and 2 unanswerabl
 
 The main evaluation achieved 100% on these recorded checks for this test set.
 
-### 8.3 Comparison with zero-overlap chunks
+### 6.3 Comparison with zero-overlap chunks
 
 A second evaluation tested chunking without overlap.
 
@@ -586,21 +579,19 @@ The zero-overlap experiment retrieved the expected document in all 12 answerable
 
 The two missed facts were:
 
-1. The delivery full-refund threshold omitted the condition **“more than 45 minutes.”**
-2. The failed-payment answer omitted the condition **“within 48 hours.”**
+- The delivery full-refund threshold omitted the condition “more than 45 minutes.”
+- The failed-payment answer omitted the condition “within 48 hours.”
 
-The expected document was still found in the top three results for both cases. This suggests that retrieval alone is not sufficient: the answer must also preserve the important conditions in the source text.
+The expected document was still found in the top three results for both cases. This suggests that retrieval alone is not sufficient: the answer must also preserve important conditions in the source text.
 
 The comparison supports using overlap for this particular dataset and implementation. It is not proof that overlapping chunks will always outperform non-overlapping chunks for every retrieval system.
 
 Generated evaluation files:
 
-```text
-outputs/policy_eval_results.csv
-outputs/policy_eval_zero_overlap.csv
-```
+- `outputs/policy_eval_results.csv`
+- `outputs/policy_eval_zero_overlap.csv`
 
-### 8.4 Limitations
+### 6.4 Policy QA limitations
 
 - Evaluation uses a small set of 14 questions.
 - Retrieval and answer checks are based on the project's evaluation logic.
@@ -608,9 +599,7 @@ outputs/policy_eval_zero_overlap.csv
 - Policy answers should retain relevant thresholds, deadlines, exceptions, and eligibility conditions.
 - Uncertain or unsupported answers should be escalated rather than invented.
 
-## 9. Part E — Simulated Refund Agent
-
-### 9.1 Purpose
+### 6.5 Simulated refund agent purpose
 
 The refund agent demonstrates a multi-step support workflow using order lookup, policy search, refund calculation, and a simulated refund action.
 
@@ -618,7 +607,7 @@ It includes scenarios for refund approval, escalation, denial, missing orders, i
 
 The workflow is a demonstration of control flow and tool orchestration, not a live payment-processing integration.
 
-### 9.2 Batch scenario results
+### 6.6 Batch scenario results
 
 The batch run recorded seven scenarios:
 
@@ -634,35 +623,39 @@ The batch run recorded seven scenarios:
 
 The run saved scenario records to:
 
-```text
-outputs/agent_runs.jsonl
-```
+`outputs/agent_runs.jsonl`
 
-### 9.3 Fallback demonstrations
+The persistent refund ledger is stored at:
+
+`outputs/refund_ledger.jsonl`
+
+Agent state and checkpoint files are stored in:
+
+`state/`
+
+### 6.7 Fallback and crash/resume demonstrations
 
 The demo command reported these outcomes:
 
-- Token-limit demonstration: `FALLBACK_TOKEN_LIMIT`
-- Timeout demonstration: `FALLBACK_TIMEOUT`
+| Demonstration | Reported outcome |
+|---|---|
+| Token-limit demonstration | `FALLBACK_TOKEN_LIMIT` |
+| Timeout demonstration | `FALLBACK_TIMEOUT` |
 
 The crash/resume demonstration reported that a simulated crash occurred after tool execution and a checkpoint was saved. The workflow then resumed with the tool sequence:
 
-```text
-get_order
-search_policy
-calculate_refund
-issue_refund
-```
+1. `get_order`
+2. `search_policy`
+3. `calculate_refund`
+4. `issue_refund`
 
 The final demonstration result was:
 
-```text
-REFUND: INR 128.25 issued.
-```
+`REFUND: INR 128.25 issued.`
 
-**This is a simulated result, not evidence that a real customer payment was issued.** The script reported that the persistent refund ledger was not changed by the demonstration.
+This is a simulated result, not evidence that a real customer payment was issued. The script reported that the persistent refund ledger was not changed by the demonstration.
 
-### 9.4 Safety considerations
+### 6.8 Refund-agent safety considerations
 
 A production refund agent would need, at minimum:
 
@@ -677,21 +670,21 @@ A production refund agent would need, at minimum:
 
 The demo does not establish that the workflow is ready for real financial transactions.
 
-## 10. Overall Findings
+## 7. Limitations and Next Steps
+
+### 7.1 Overall findings
 
 The project produced several useful findings from the generated data and tested workflows:
 
-1. **Data quality matters.** Normalising customer fields, removing exact duplicate rows, and validating order records establishes a more consistent foundation for analysis.
-2. **Completed-order revenue can be reconciled.** The SQL analysis and customer insights reported ₹2,998,668.80 in completed-order spending.
-3. **Customer segments support different retention strategies.** The At Risk and High Value groups have distinct order frequency, spend, and recency patterns.
-4. **Lapse prediction outperformed the baseline in the recorded test.** The selected random forest achieved a test F1 of 0.6667, although real-world performance remains unverified.
-5. **Ticket routing needs fallback paths.** Invalid outputs, missing messages, and long tickets were handled through explicit statuses and review routes.
-6. **Policy answers must preserve exact conditions.** The zero-overlap comparison missed two expected facts even though the expected documents were retrieved.
-7. **Refund workflows need safeguards.** Token limits, timeouts, maximum iterations, and crash/resume behaviour demonstrate why fallback handling and auditability are important.
+- **Data quality matters.** Normalising customer fields, removing exact duplicate rows, and validating order records establishes a more consistent foundation for analysis.
+- **Completed-order revenue can be reconciled.** The SQL analysis and customer insights reported ₹2,998,668.80 in completed-order spending.
+- **Customer segments support different retention strategies.** The At Risk and High Value groups have distinct order frequency, spend, and recency patterns.
+- **Lapse prediction outperformed the baseline in the recorded test.** The selected random forest achieved a test F1 of 0.6667, although real-world performance remains unverified.
+- **Ticket routing needs fallback paths.** Invalid outputs, missing messages, and long tickets were handled through explicit statuses and review routes.
+- **Policy answers must preserve exact conditions.** The zero-overlap comparison missed two expected facts even though the expected documents were retrieved.
+- **Refund workflows need safeguards.** Token limits, timeouts, maximum iterations, and crash/resume behaviour demonstrate why fallback handling and auditability are important.
 
-## 11. Limitations and Future Improvements
-
-### Limitations
+### 7.2 Limitations
 
 - The datasets are generated for the project and do not establish performance on real Instamart customer data.
 - The lapse model's results depend on the snapshot, features, split, and generated data distribution.
@@ -700,7 +693,7 @@ The project produced several useful findings from the generated data and tested 
 - The refund agent uses a simulated workflow and does not prove live payment execution.
 - Successful syntax, dependency, and validation checks do not guarantee that every production scenario has been tested.
 
-### Future improvements
+### 7.3 Future improvements
 
 - Add automated unit and integration tests for edge cases.
 - Evaluate lapse prediction on a separate, representative dataset with time-based validation.
@@ -712,10 +705,10 @@ The project produced several useful findings from the generated data and tested 
 - Use a sandbox environment and explicit human approval for any future payment integration.
 - Document expected outputs for each script and add a single reproducible test command.
 
-## 12. Conclusion
+### 7.4 Conclusion
 
 The Instamart Customer Intelligence & Support Copilot combines data engineering, SQL analytics, customer segmentation, machine learning, ticket triage, policy retrieval, and simulated agent orchestration in one project.
 
-The tested scripts completed their reported checks, including **53 data validation checks, successful Python compilation, and a clean dependency check**. The experiments also identify areas requiring further evaluation, particularly generalisation of the lapse model, reliability of ticket classification, completeness of policy answers, and safeguards around refund actions.
+The tested scripts completed their reported checks, including 53 data validation checks, successful Python compilation, and a clean dependency check. The experiments also identify areas requiring further evaluation, particularly generalisation of the lapse model, reliability of ticket classification, completeness of policy answers, and safeguards around refund actions.
 
 The project is a learning and demonstration system. Additional testing, representative data, privacy review, operational monitoring, and appropriate approvals would be required before using similar workflows in production.

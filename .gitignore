@@ -4,15 +4,10 @@ __pycache__/
 venv/
 .env
 .vscode/
+
 # Local backup files
 README_part_c_backup.md
 src/refund_agent_backup.py
 src/refund_agent_backup_before_fix.py
 src/lapse_model_backup.py
 *.tmp
-state/*demo*
-state/*checkpoint*
-
-# Local refund ledger and agent execution state
-outputs/refund_ledger.jsonl
-state/

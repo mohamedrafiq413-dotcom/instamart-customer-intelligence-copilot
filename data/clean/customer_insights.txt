@@ -1,0 +1,31 @@
+﻿============================================================
+INSTAMART CUSTOMER INTELLIGENCE SUMMARY
+============================================================
+
+Total customers analyzed: 1200
+Total completed orders: 11110
+Total recorded completed-order spending: â‚¹2,998,668.80
+
+CUSTOMER SEGMENT SUMMARY
+------------------------------------------------------------
+                     customers  avg_completed_orders  avg_spend  percentage
+segment
+At Risk                    301                  2.87    1285.30       25.08
+High Value                 241                 15.71    5659.37       20.08
+No Completed Orders         25                  0.00       0.00        2.08
+Regular                    633                 10.21    1971.38       52.75
+
+BUSINESS RECOMMENDATIONS
+------------------------------------------------------------
+
+At Risk: 301.0 customers (25.08%)
+Consider a re-engagement campaign and investigate whether these customers experienced service issues.
+
+High Value: 241.0 customers (20.08%)
+Offer loyalty rewards and personalized product recommendations to encourage repeat purchases.
+
+No Completed Orders: 25.0 customers (2.08%)
+Review the customer journey and offer helpful onboarding guidance where appropriate.
+
+Regular: 633.0 customers (52.75%)
+Encourage repeat purchases with relevant offers and useful product recommendations.

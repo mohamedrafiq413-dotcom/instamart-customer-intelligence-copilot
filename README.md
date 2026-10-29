@@ -506,7 +506,7 @@ These results describe the recorded evaluation and should not be assumed to gene
 
 ### 5.4 Token budget and final routing
 
-The demonstration used a token budget of 6,000 and reported 80 budget-exhausted tickets.
+The demonstration used a configured token budget of 6,000 and reported 80 budget-exhausted tickets. The saved `outputs/triage_budget_demo.csv` contains 164 rows and records a total of 6,038 tokens. The recorded total is slightly above the configured cap, so the budget should be interpreted as the pipeline's configured control rather than assuming the final recorded total must be at or below 6,000.
 
 Generated files:
 

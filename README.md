@@ -48,7 +48,9 @@ python .\src\refund_agent.py --demos
 python .\src\refund_agent.py --resume-demo
 ```
 
-Project validation: **53 checks passed, 0 failed.**
+**Project validation:** 53 checks passed, 0 failed.
+
+The policy QA script opens an interactive session after evaluation. Type `exit` to finish. The project uses simulated data and an offline Mock LLM; no paid API is required.
 
 ## 3. Part A - Data Quality and SQL Analytics
 
@@ -59,21 +61,22 @@ Generated data:
 - 164 support tickets
 
 After cleaning, 12,309 orders remained:
-- 11,110 completed
-- 1,199 cancelled
+- 11,110 completed orders
+- 1,199 cancelled orders
 
 The SQLite database was created at `data/instamart.db`.
 
 **Key findings:**
 - Completed-order revenue: ₹2,998,668.80
 - Top-selling product: Instant Noodles 4 Pack (867 units)
-- Revenue was analysed by customer, city, product and date using seven SQL queries.
+- The analysis covered customer activity, product sales, city revenue, order trends and cumulative revenue.
+- Seven SQL queries were executed successfully.
 
 ## 4. Part B - Customer Intelligence and Lapse Prediction
 
 Customer intelligence identified Regular, At Risk, High Value and No Completed Orders segments.
 
-RFM analysis used 1,175 customers and four K-Means clusters.
+RFM analysis included 1,175 customers and four K-Means clusters.
 
 | Segment | Customers | Recency | Frequency | Monetary (₹) |
 |---|---:|---:|---:|---:|
@@ -82,18 +85,20 @@ RFM analysis used 1,175 customers and four K-Means clusters.
 | Frequent | 419 | 8.77 | 19.40 | 3,410.02 |
 | Developing | 182 | 109.04 | 2.20 | 685.99 |
 
-The lapse prediction model used historical customer activity to identify inactive customers.
+The first two PCA components explained 85.23% of the variance.
+
+**Lapse prediction results:**
 
 | Model | Accuracy | Precision | Recall | F1-score |
 |---|---:|---:|---:|---:|
 | Logistic Regression | 69.40% | 59.38% | 64.04% | 61.62% |
 | Random Forest | 73.71% | 65.22% | 67.42% | 66.30% |
 
-Random Forest was selected based on its higher cross-validation F1-score.
+Random Forest was selected based on its higher training cross-validation F1-score (0.6869).
 
-The balanced Logistic Regression experiment improved recall from 64.04% to 85.39%.
+Oversampling the training data improved Logistic Regression recall from 64.04% to 85.39%.
 
-The model was saved and reloaded successfully. The retention list contains the top 10 Premium test customers by lapse probability. One was actually lapsed. This list is illustrative because Premium membership uses the full observation period.
+The model was saved and reloaded with identical predictions. The retention list contains the top 10 Premium test customers by lapse probability; one was actually lapsed. This list is illustrative because Premium membership uses the full observation period.
 
 **Main outputs:**
 - `outputs/customer_segments.csv`
@@ -104,6 +109,8 @@ The model was saved and reloaded successfully. The retention list contains the t
 
 The project processed 164 support tickets. 160 were ready for classification, and 4 required manual review.
 
+**Triage evaluation:**
+
 | Metric | Zero-shot | Few-shot |
 |---|---:|---:|
 | Classified tickets | 147 | 147 |
@@ -113,16 +120,14 @@ The project processed 164 support tickets. 160 were ready for classification, an
 
 The few-shot approach improved accuracy but used more tokens.
 
-**PII redaction results:**
+**PII redaction:**
 - 55 email addresses
 - 91 phone numbers
 - 132 order IDs
 - 278 total replacements
 - Zero remaining PII matches
 
-The pipeline also includes retry handling, long-message protection, token-budget checks and ticket routing.
-
-The 6,000-token budget demonstration produced 80 budget-exhausted tickets and 6,038 aggregate tokens due to pre-call budget checking.
+The pipeline includes retry handling, long-message protection, token-budget checks and ticket routing. The 6,000-token budget demonstration produced 80 budget-exhausted tickets and 6,038 aggregate tokens due to pre-call budget checking.
 
 **Main outputs:**
 - `data/clean/processed_tickets.csv`
@@ -133,9 +138,11 @@ The 6,000-token budget demonstration produced 80 budget-exhausted tickets and 6,
 
 ## 6. Part D - Policy QA and Simulated Refund Agent
 
-The Policy QA system uses five policy documents, 40-word chunks and 10-word overlap. It retrieves relevant information using TF-IDF and cosine similarity.
+### Policy QA
 
-Evaluation covered 14 questions: 12 answerable and 2 unanswerable.
+Five policy documents were divided into 40-word chunks with 10-word overlap, producing 15 chunks. TF-IDF and cosine similarity retrieved the three most relevant chunks.
+
+Evaluation covered 12 answerable and 2 unanswerable questions.
 
 | Evaluation | With overlap | Zero overlap |
 |---|---:|---:|
@@ -143,13 +150,37 @@ Evaluation covered 14 questions: 12 answerable and 2 unanswerable.
 | Expected facts found | 12/12 | 10/12 |
 | Correct fallback responses | 2/2 | 2/2 |
 
-The simulated refund agent uses five tools: `get_order`, `search_policy`, `calculate_refund`, `issue_refund` and `escalate_to_human`.
+Overlap helped preserve two policy facts that were missed at chunk boundaries without overlap.
 
-Seven scenarios tested refunds, denials, escalation, missing orders and maximum-iteration fallback. Additional tests covered token limits, timeouts and crash-resume functionality.
+### Refund Support Agent
 
-The agent uses a ReAct approach, selecting tools based on previous observations. Plan-and-Execute was considered as an alternative, but a separate implementation and measured comparison were not completed.
+The simulated agent uses five tools:
 
-**Limitations:** The seven-day refund window is not enforced because delivery and request timestamps are unavailable. The handoff fallback also needs a more detailed work summary. The refund ledger contains repeated historical events for some orders. No real payments are issued.
+- `get_order`
+- `search_policy`
+- `calculate_refund`
+- `issue_refund`
+- `escalate_to_human`
+
+Seven scenarios tested refunds, denials, escalation, missing orders and maximum-iteration fallback.
+
+| Scenario | Result | LLM calls | Tokens |
+|---|---|---:|---:|
+| S1 | REFUND - INR 128.25 | 5 | 1,102 |
+| S2 | REFUND - INR 135.00 | 5 | 1,102 |
+| S3 | ESCALATE | 5 | 1,089 |
+| S4 | DENIED | 4 | 769 |
+| S5 | DENIED | 3 | 460 |
+| S6 | NOT_FOUND | 1 | 71 |
+| S7 | FALLBACK_MAX_ITERATIONS | 6 | 3,246 |
+
+Additional tests verified token-limit fallback, timeout fallback and checkpoint-based crash/resume.
+
+The agent follows a ReAct approach, selecting tools based on previous observations. The saved runs required 5 calls for S1, 3 for S5 and 1 for S6. ReAct allows the agent to adapt to tool results, while Plan-and-Execute establishes a plan before execution. ReAct was preferred for this workflow because it supports step-by-step decisions. A separate Plan-and-Execute implementation and numerical benchmark were not completed.
+
+The human-handoff fallback now includes completed tool observations and relevant policy sources.
+
+**Limitations:** The seven-day refund rule cannot currently be enforced because separate delivery and refund-request dates are unavailable. The refund ledger contains repeated historical events for some orders. No real payments are issued.
 
 **Main outputs:**
 - `outputs/policy_eval_results.csv`
@@ -162,9 +193,8 @@ The agent uses a ReAct approach, selecting tools based on previous observations.
 
 - The project uses simulated data and an offline Mock LLM.
 - Real-world model performance may differ.
-- Refund processing requires stronger duplicate prevention and transaction controls.
-- Seven-day refund eligibility and detailed human handoff need further implementation.
-- Production deployment would require secure payment integration and monitoring.
+- Seven-day refund eligibility needs delivery and request-date information.
+- Production deployment would require stronger transaction controls, duplicate-refund protection, monitoring and secure payment integration.
 
 ## Conclusion
 

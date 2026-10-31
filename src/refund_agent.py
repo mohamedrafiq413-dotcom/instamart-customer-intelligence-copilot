@@ -31,25 +31,34 @@ CHUNKS = policy_qa.chunk_documents(DOCS, overlap=10)
 RETRIEVER = policy_qa.PolicyRetriever(CHUNKS)
 
 
+# ------------------------------------------------------------
+# Temporary ledger for demonstrations
+# ------------------------------------------------------------
+
 @contextmanager
 def _isolated_demo_ledger(label):
-    """Use a fresh temporary ledger for repeatable demonstrations.
+    """Use a temporary ledger without modifying persistent history."""
 
-    The persistent refund ledger is restored even if a demo raises an error.
-    This keeps demo/test runs from changing the real audit history.
-    """
     global LEDGER
+
     original_ledger = LEDGER
     demo_ledger = STATE / f"{label}-{uuid.uuid4().hex}.jsonl"
+
     STATE.mkdir(parents=True, exist_ok=True)
     LEDGER = demo_ledger
+
     try:
         yield demo_ledger
     finally:
         LEDGER = original_ledger
+
         if demo_ledger.exists():
             demo_ledger.unlink()
 
+
+# ------------------------------------------------------------
+# Tool specifications
+# ------------------------------------------------------------
 
 TOOLS_SPEC = [
     {
@@ -57,7 +66,9 @@ TOOLS_SPEC = [
         "description": "Look up an order in SQLite.",
         "parameters": {
             "type": "object",
-            "properties": {"order_id": {"type": "string"}},
+            "properties": {
+                "order_id": {"type": "string"}
+            },
             "required": ["order_id"],
         },
     },
@@ -66,7 +77,9 @@ TOOLS_SPEC = [
         "description": "Retrieve relevant policy chunks.",
         "parameters": {
             "type": "object",
-            "properties": {"query": {"type": "string"}},
+            "properties": {
+                "query": {"type": "string"}
+            },
             "required": ["query"],
         },
     },
@@ -86,7 +99,9 @@ TOOLS_SPEC = [
     },
     {
         "name": "issue_refund",
-        "description": "Record an eligible simulated refund of INR 1000 or less.",
+        "description": (
+            "Record an eligible simulated refund of INR 1000 or less."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -98,7 +113,9 @@ TOOLS_SPEC = [
     },
     {
         "name": "escalate_to_human",
-        "description": "Record a refund above INR 1000 for human review.",
+        "description": (
+            "Record a refund above INR 1000 for human review."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -122,8 +139,10 @@ TOOLS = [
 
 def get_order(order_id):
     """Retrieve an order from the SQLite database."""
+
     with sqlite3.connect(DB) as con:
         con.row_factory = sqlite3.Row
+
         row = con.execute(
             """
             SELECT order_id, status, order_amount, delivery_minutes
@@ -149,19 +168,26 @@ def get_order(order_id):
 
 def search_policy(query):
     """Retrieve relevant policy document chunks."""
-    return {"results": RETRIEVER.retrieve(query, k=3)}
+
+    return {
+        "results": RETRIEVER.retrieve(query, k=3)
+    }
 
 
 def calculate_refund(order_amount, delivery_minutes):
     """Calculate the simulated late-delivery refund amount."""
+
     if delivery_minutes is None or float(delivery_minutes) <= 45:
         return {"refund_inr": 0.0}
 
-    return {"refund_inr": round(float(order_amount), 2)}
+    return {
+        "refund_inr": round(float(order_amount), 2)
+    }
 
 
 def _ledger(tool_name, order_id, amount):
     """Append a simulated refund or escalation record."""
+
     OUT.mkdir(parents=True, exist_ok=True)
 
     record = {
@@ -172,18 +198,25 @@ def _ledger(tool_name, order_id, amount):
     }
 
     with LEDGER.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(record, ensure_ascii=False) + "\n")
+        file.write(
+            json.dumps(record, ensure_ascii=False) + "\n"
+        )
 
 
 def _has_previous_refund(order_id):
-    """Check whether a refund or escalation was already recorded for an order."""
+    """Check whether a refund or escalation was already recorded."""
+
     if not LEDGER.exists():
         return False
 
-    recorded_actions = {"issue_refund", "escalate_to_human"}
+    recorded_actions = {
+        "issue_refund",
+        "escalate_to_human",
+    }
 
     with LEDGER.open("r", encoding="utf-8") as file:
         for line in file:
+
             if not line.strip():
                 continue
 
@@ -203,6 +236,7 @@ def _has_previous_refund(order_id):
 
 def issue_refund(order_id, refund_inr):
     """Issue an eligible simulated refund of INR 1000 or less."""
+
     order = get_order(order_id)
 
     if "error" in order:
@@ -214,7 +248,9 @@ def issue_refund(order_id, refund_inr):
         }
 
     if order["status"] != "completed":
-        return {"error": "Only completed orders qualify for refunds."}
+        return {
+            "error": "Only completed orders qualify for refunds."
+        }
 
     minutes = order["delivery_minutes"]
 
@@ -235,12 +271,17 @@ def issue_refund(order_id, refund_inr):
             "error": "Refund amount does not match the order amount."
         }
 
+    # Seven-day eligibility cannot be verified from the current data.
+    # There is no separate delivery date or refund-request timestamp.
+
     _ledger("issue_refund", order_id, actual)
+
     return {"refund_inr": actual}
 
 
 def escalate_to_human(order_id, refund_inr):
     """Record an eligible refund above INR 1000 for human review."""
+
     order = get_order(order_id)
 
     if "error" in order:
@@ -248,7 +289,10 @@ def escalate_to_human(order_id, refund_inr):
 
     if _has_previous_refund(order_id):
         return {
-            "error": "A refund or escalation has already been recorded for this order."
+            "error": (
+                "A refund or escalation has already been recorded "
+                "for this order."
+            )
         }
 
     if order["status"] != "completed":
@@ -266,14 +310,19 @@ def escalate_to_human(order_id, refund_inr):
     actual = round(float(order["order_amount"]), 2)
 
     if actual <= 1000:
-        return {"error": "Refund is not eligible for escalation."}
+        return {
+            "error": "Refund is not eligible for escalation."
+        }
 
     if abs(float(refund_inr) - actual) > 0.01:
         return {
             "error": "Refund amount does not match the order amount."
         }
 
+    # Seven-day eligibility cannot be verified from the current data.
+
     _ledger("escalate_to_human", order_id, actual)
+
     return {"refund_inr": actual}
 
 
@@ -288,6 +337,7 @@ TOOL_MAP = {
 
 def run_tool(name, arguments):
     """Validate arguments and execute a registered tool."""
+
     if isinstance(arguments, str):
         arguments = json.loads(arguments)
 
@@ -302,6 +352,7 @@ def run_tool(name, arguments):
 
 def field(obj, name, default=None):
     """Read a field from either a dictionary or an object."""
+
     if isinstance(obj, dict):
         return obj.get(name, default)
 
@@ -310,6 +361,7 @@ def field(obj, name, default=None):
 
 def safe_tool_call(call):
     """Normalize mock-model tool calls."""
+
     fn = field(call, "function")
     name = field(call, "name") or field(fn, "name")
     args = field(call, "arguments")
@@ -332,21 +384,99 @@ def safe_tool_call(call):
 
 def status_for(answer):
     """Extract the status prefix from a model answer."""
-    return answer.split(":", 1)[0].strip().upper() if answer else "UNKNOWN"
 
+    return (
+        answer.split(":", 1)[0].strip().upper()
+        if answer
+        else "UNKNOWN"
+    )
+
+
+# ------------------------------------------------------------
+# Human handoff
+# ------------------------------------------------------------
 
 def fallback(status, steps):
-    """Create a safe human-handoff message for agent limits."""
+    """Create a human-handoff message containing completed work."""
+
     summaries = {
-        "FALLBACK_MAX_ITERATIONS": "The agent reached its model-call limit.",
+        "FALLBACK_MAX_ITERATIONS": (
+            "The agent reached its model-call limit."
+        ),
         "FALLBACK_TOKEN_LIMIT": (
             "The token budget was exceeded before the requested tool ran."
         ),
-        "FALLBACK_TIMEOUT": "The agent reached its time limit.",
+        "FALLBACK_TIMEOUT": (
+            "The agent reached its time limit."
+        ),
     }
 
+    completed_work = []
+
+    # Include up to the four most recent completed tool observations.
+    for step in steps[-4:]:
+
+        tool_name = step.get("tool_name", "unknown_tool")
+        observation = step.get("observation", {})
+
+        if not isinstance(observation, dict):
+            detail = "Tool completed."
+
+        elif "error" in observation:
+            detail = str(observation["error"])
+
+        elif tool_name == "get_order":
+            detail = (
+                f"Order status: {observation.get('status', 'unknown')}; "
+                f"amount: INR {observation.get('order_amount', 'unknown')}"
+            )
+
+        elif tool_name == "search_policy":
+            results = observation.get("results", [])
+
+            sources = sorted({
+                item.get("source", "")
+                for item in results
+                if item.get("source")
+            })
+
+            detail = (
+                "Policy sources: " + ", ".join(sources)
+                if sources
+                else "Policy search completed."
+            )
+
+        elif "refund_inr" in observation:
+            detail = (
+                f"Calculated refund: INR {observation['refund_inr']}"
+            )
+
+        else:
+            detail = "Tool completed."
+
+        completed_work.append(
+            f"{tool_name}: {detail}"
+        )
+
+    if completed_work:
+        handoff_summary = (
+            "Completed work: "
+            + " | ".join(completed_work)
+            + "."
+        )
+    else:
+        handoff_summary = (
+            "No tools were completed before handoff."
+        )
+
+    reason = summaries.get(
+        status,
+        "The agent could not complete the request."
+    )
+
     return (
-        f"{status}: {summaries[status]} "
+        f"{status}: {reason} "
+        f"{handoff_summary} "
         "Please hand this case to a human support agent."
     )
 
@@ -364,18 +494,28 @@ def checkpoint_path(run_id):
 
 
 def save_checkpoint(state):
+    """Save the current agent state."""
+
     STATE.mkdir(parents=True, exist_ok=True)
 
     with checkpoint_path(state["run_id"]).open(
-        "w", encoding="utf-8"
+        "w",
+        encoding="utf-8",
     ) as file:
-        json.dump(state, file, ensure_ascii=False, indent=2)
+        json.dump(
+            state,
+            file,
+            ensure_ascii=False,
+            indent=2,
+        )
 
 
 def finish(state, status, answer):
     """Save final state and return the public result."""
+
     state["status"] = status
     state["final_answer"] = answer
+
     save_checkpoint(state)
 
     return {
@@ -394,10 +534,12 @@ def finish(state, status, answer):
 
 
 def continue_agent(state, crash_after_tool_executions=None):
-    """Continue an agent run, saving each tool observation."""
+    """Continue an agent run, saving every tool observation."""
+
     started = time.monotonic()
 
     while state["llm_calls"] < state["max_iterations"]:
+
         if (
             time.monotonic() - started
             >= state["time_limit_seconds"]
@@ -405,13 +547,21 @@ def continue_agent(state, crash_after_tool_executions=None):
             return finish(
                 state,
                 "FALLBACK_TIMEOUT",
-                fallback("FALLBACK_TIMEOUT", state["steps"]),
+                fallback(
+                    "FALLBACK_TIMEOUT",
+                    state["steps"],
+                ),
             )
 
-        response = mock_llm.chat(state["messages"], tools=TOOLS)
+        response = mock_llm.chat(
+            state["messages"],
+            tools=TOOLS,
+        )
+
         state["llm_calls"] += 1
 
         usage = field(response, "usage")
+
         state["tokens_used"] += int(
             field(usage, "total_tokens", 0) or 0
         )
@@ -419,30 +569,45 @@ def continue_agent(state, crash_after_tool_executions=None):
         msg = response.choices[0].message
         calls = field(msg, "tool_calls", []) or []
 
+        # Stop before executing tools if the token limit is exceeded.
         if state["tokens_used"] > state["token_limit"]:
             return finish(
                 state,
                 "FALLBACK_TOKEN_LIMIT",
-                fallback("FALLBACK_TOKEN_LIMIT", state["steps"]),
+                fallback(
+                    "FALLBACK_TOKEN_LIMIT",
+                    state["steps"],
+                ),
             )
 
+        # A response without tool calls is the final answer.
         if not calls:
             answer = field(msg, "content", "") or ""
-            return finish(state, status_for(answer), answer)
+            return finish(
+                state,
+                status_for(answer),
+                answer,
+            )
 
-        calls = [safe_tool_call(call) for call in calls]
+        calls = [
+            safe_tool_call(call)
+            for call in calls
+        ]
 
-        state["messages"].append(
-            {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": calls,
-            }
-        )
+        state["messages"].append({
+            "role": "assistant",
+            "content": None,
+            "tool_calls": calls,
+        })
 
         for call in calls:
+
             try:
-                result = run_tool(call["name"], call["arguments"])
+                result = run_tool(
+                    call["name"],
+                    call["arguments"],
+                )
+
             except (
                 TypeError,
                 ValueError,
@@ -452,33 +617,30 @@ def continue_agent(state, crash_after_tool_executions=None):
             ) as error:
                 result = {"error": str(error)}
 
-            state["messages"].append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call["id"],
-                    "name": call["name"],
-                    "content": json.dumps(
-                        result, ensure_ascii=False
-                    ),
-                }
-            )
+            state["messages"].append({
+                "role": "tool",
+                "tool_call_id": call["id"],
+                "name": call["name"],
+                "content": json.dumps(
+                    result,
+                    ensure_ascii=False,
+                ),
+            })
 
-            state["steps"].append(
-                {
-                    "step": len(state["steps"]) + 1,
-                    "tool_name": call["name"],
-                    "arguments": call["arguments"],
-                    "observation": result,
-                }
-            )
+            state["steps"].append({
+                "step": len(state["steps"]) + 1,
+                "tool_name": call["name"],
+                "arguments": call["arguments"],
+                "observation": result,
+            })
 
             state["tools_executed"].append(call["name"])
             state["step_number"] = len(state["steps"])
 
-            # Persist every tool observation before continuing.
+            # Save each completed tool observation immediately.
             save_checkpoint(state)
 
-            # Keep the crash demonstration deterministic.
+            # Keep the simulated crash demonstration deterministic.
             if (
                 crash_after_tool_executions
                 == len(state["tools_executed"])
@@ -487,10 +649,9 @@ def continue_agent(state, crash_after_tool_executions=None):
                     "Simulated crash; checkpoint saved after tool execution."
                 )
 
-            # Critical fix: do not send tool errors to mock_llm as
-            # successful results. Its supplied implementation expects
-            # refund_inr in successful refund-tool responses.
+            # Do not pass failed tool results back as successful results.
             if isinstance(result, dict) and "error" in result:
+
                 error_message = str(result["error"])
 
                 status = (
@@ -508,7 +669,10 @@ def continue_agent(state, crash_after_tool_executions=None):
     return finish(
         state,
         "FALLBACK_MAX_ITERATIONS",
-        fallback("FALLBACK_MAX_ITERATIONS", state["steps"]),
+        fallback(
+            "FALLBACK_MAX_ITERATIONS",
+            state["steps"],
+        ),
     )
 
 
@@ -522,7 +686,10 @@ def run_agent(
     crash_after_tool_executions=None,
 ):
     """Start a new agent run."""
-    run_id = run_id or f"{scenario_id}-{uuid.uuid4().hex[:8]}"
+
+    run_id = run_id or (
+        f"{scenario_id}-{uuid.uuid4().hex[:8]}"
+    )
 
     state = {
         "run_id": run_id,
@@ -541,10 +708,17 @@ def run_agent(
                     "Only completed orders qualify. A late-delivery "
                     "refund requires delivery over 45 minutes. "
                     "Refunds above INR 1000 require human approval. "
-                    "Never claim real money was transferred."
+                    "Never claim real money was transferred. "
+                    "The available data does not provide a separate "
+                    "delivery date or refund-request date. Do not "
+                    "claim that the seven-day request window has "
+                    "been verified."
                 ),
             },
-            {"role": "user", "content": user_message},
+            {
+                "role": "user",
+                "content": user_message,
+            },
         ],
         "tokens_used": 0,
         "llm_calls": 0,
@@ -565,10 +739,13 @@ def run_agent(
 
 def resume_agent(run_id):
     """Resume an unfinished agent run from its checkpoint."""
+
     path = checkpoint_path(run_id)
 
     if not path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {path}")
+        raise FileNotFoundError(
+            f"Checkpoint not found: {path}"
+        )
 
     with path.open(encoding="utf-8") as file:
         state = json.load(file)
@@ -597,6 +774,7 @@ def resume_agent(run_id):
 
 def append_run(result):
     """Append one completed scenario result to the run log."""
+
     OUT.mkdir(parents=True, exist_ok=True)
 
     record = {
@@ -612,44 +790,72 @@ def append_run(result):
     }
 
     with RUN_LOG.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(record, ensure_ascii=False) + "\n")
+        file.write(
+            json.dumps(record, ensure_ascii=False) + "\n"
+        )
 
 
 def run_all_scenarios():
-    """Run the seven supplied scenarios against a clean, temporary ledger."""
+    """Run seven scenarios using a temporary demonstration ledger."""
+
     OUT.mkdir(parents=True, exist_ok=True)
 
     path = ROOT / "data" / "raw" / "agent_scenarios.csv"
-    with path.open(newline="", encoding="utf-8-sig") as file:
+
+    with path.open(
+        newline="",
+        encoding="utf-8-sig",
+    ) as file:
         scenarios = list(csv.DictReader(file))
 
     RUN_LOG.write_text("", encoding="utf-8")
+
     results = []
 
     with _isolated_demo_ledger("batch-demo-ledger"):
+
         for row in scenarios:
+
             mock_llm.reset()
-            result = run_agent(row["message"], row["scenario_id"])
+
+            result = run_agent(
+                row["message"],
+                row["scenario_id"],
+            )
+
             append_run(result)
             results.append(result)
+
             print(
-                f'{result["scenario_id"]}: {result["status"]}; '
+                f'{result["scenario_id"]}: '
+                f'{result["status"]}; '
                 f'calls={result["llm_calls"]}; '
                 f'tokens={result["tokens_used"]}'
             )
 
-    print(f"Saved {len(results)} scenario records to {RUN_LOG}")
-    print("The persistent refund ledger was not changed by this demo.")
+    print(
+        f"Saved {len(results)} scenario records to {RUN_LOG}"
+    )
+
+    print(
+        "The persistent refund ledger was not changed by this demo."
+    )
+
     return results
 
 
 def run_limit_demos():
     """Demonstrate token-limit and timeout fallbacks."""
-    scenario_path = ROOT / "data" / "raw" / "agent_scenarios.csv"
+
+    scenario_path = (
+        ROOT / "data" / "raw" / "agent_scenarios.csv"
+    )
 
     with scenario_path.open(
-        newline="", encoding="utf-8-sig"
+        newline="",
+        encoding="utf-8-sig",
     ) as file:
+
         s1 = next(
             row["message"]
             for row in csv.DictReader(file)
@@ -664,6 +870,7 @@ def run_limit_demos():
         token_limit=200,
         run_id="demo-token-limit",
     )
+
     print("Token-limit demo:", token["status"])
 
     mock_llm.reset()
@@ -674,28 +881,43 @@ def run_limit_demos():
         time_limit_seconds=0,
         run_id="demo-timeout",
     )
+
     print("Timeout demo:", timeout["status"])
 
     return token, timeout
 
 
 def run_resume_demo():
-    """Demonstrate crash/resume using a temporary ledger, not real history."""
-    scenario_path = ROOT / "data" / "raw" / "agent_scenarios.csv"
-    with scenario_path.open(newline="", encoding="utf-8-sig") as file:
+    """Demonstrate crash/resume using a temporary ledger."""
+
+    scenario_path = (
+        ROOT / "data" / "raw" / "agent_scenarios.csv"
+    )
+
+    with scenario_path.open(
+        newline="",
+        encoding="utf-8-sig",
+    ) as file:
+
         s1 = next(
             row["message"]
             for row in csv.DictReader(file)
             if row["scenario_id"] == "S1"
         )
 
-    run_id = f"demo-resume-s1-{uuid.uuid4().hex[:8]}"
+    run_id = (
+        f"demo-resume-s1-{uuid.uuid4().hex[:8]}"
+    )
+
     cp = checkpoint_path(run_id)
+
     if cp.exists():
         cp.unlink()
 
     with _isolated_demo_ledger("resume-demo-ledger"):
+
         mock_llm.reset()
+
         try:
             run_agent(
                 s1,
@@ -703,51 +925,100 @@ def run_resume_demo():
                 run_id=run_id,
                 crash_after_tool_executions=2,
             )
+
         except SimulatedCrash as error:
             print(error)
 
         result = resume_agent(run_id)
 
-    print("Tools across crash/resume:", result["tools_executed"])
-    print("Final result:", result["status"], result["final_answer"])
-    print("The persistent refund ledger was not changed by this demo.")
+    print(
+        "Tools across crash/resume:",
+        result["tools_executed"],
+    )
+
+    print(
+        "Final result:",
+        result["status"],
+        result["final_answer"],
+    )
+
+    print(
+        "The persistent refund ledger was not changed by this demo."
+    )
+
     return result
 
 
+# ------------------------------------------------------------
+# Interactive mode
+# ------------------------------------------------------------
+
 def interactive():
-    """Run the agent interactively."""
-    print("Refund Support Agent - simulation only. Type exit to stop.")
+    """Run the refund agent interactively."""
+
+    print(
+        "Refund Support Agent - simulation only. Type exit to stop."
+    )
 
     while True:
+
         question = input("\nYour question: ").strip()
 
         if question.lower() in {"exit", "quit"}:
             break
 
         if not re.search(r"ORD-\d{6}", question):
-            print("Please include an order ID such as ORD-123456.")
+            print(
+                "Please include an order ID such as ORD-123456."
+            )
             continue
 
         mock_llm.reset()
 
-        result = run_agent(question, "interactive")
-        print(result["status"], result["final_answer"])
+        result = run_agent(
+            question,
+            "interactive",
+        )
 
+        print(
+            result["status"],
+            result["final_answer"],
+        )
+
+
+# ------------------------------------------------------------
+# Main execution
+# ------------------------------------------------------------
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--batch", action="store_true")
-    parser.add_argument("--demos", action="store_true")
-    parser.add_argument("--resume-demo", action="store_true")
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--demos",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--resume-demo",
+        action="store_true",
+    )
 
     args = parser.parse_args()
 
     if args.batch:
         run_all_scenarios()
+
     elif args.demos:
         run_limit_demos()
+
     elif args.resume_demo:
         run_resume_demo()
+
     else:
         interactive()

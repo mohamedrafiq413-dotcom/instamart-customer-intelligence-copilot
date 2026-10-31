@@ -99,6 +99,10 @@ print("Completed September orders:", len(september_completed))
 # RFM is calculated as of the fixed snapshot date.
 # This whole-window segment output is for reporting and routing.
 # Segment labels are not used as predictive model features.
+#
+# Only customers with at least one completed order are included.
+# This gives the required RFM population of 1,175 customers.
+
 rfm = (
     completed.groupby("customer_id")
     .agg(
@@ -109,25 +113,33 @@ rfm = (
     .reset_index()
 )
 
+# Calculate recency in whole days.
 rfm["recency"] = (
     SNAPSHOT_DATE - rfm["last_order"]
-).dt.total_seconds() / 86400
+).dt.days
 
-rfm = rfm[[
-    "customer_id", "recency", "frequency", "monetary"
-]].copy()
+# Keep only customers with completed orders.
+# Do not merge with all customers because that would add
+# the 25 customers who have no completed orders.
+rfm = rfm[
+    ["customer_id", "recency", "frequency", "monetary"]
+].copy()
 
-rfm = customers[["customer_id"]].merge(
-    rfm, on="customer_id", how="left"
+print("\nRFM DATA CHECK")
+print("RFM customer count:", len(rfm))
+print("Customers with zero frequency:", int((rfm["frequency"] == 0).sum()))
+print("Recency minimum:", int(rfm["recency"].min()))
+print("Recency median:", float(rfm["recency"].median()))
+print("Recency maximum:", int(rfm["recency"].max()))
+
+assert len(rfm) == 1175, (
+    f"Expected 1175 RFM customers, found {len(rfm)}"
 )
-
-# Customers without completed orders receive zero frequency/spend.
-# Recency is set to days between snapshot and their last possible
-# observation boundary, so it is never missing.
-rfm["frequency"] = rfm["frequency"].fillna(0)
-rfm["monetary"] = rfm["monetary"].fillna(0)
-rfm["recency"] = rfm["recency"].fillna(
-    (SNAPSHOT_DATE - LAPSE_CUTOFF).total_seconds() / 86400
+assert (rfm["frequency"] > 0).all(), (
+    "RFM contains customers without completed orders."
+)
+assert rfm["recency"].notna().all(), (
+    "RFM contains missing recency values."
 )
 
 rfm_numeric = rfm[["recency", "frequency", "monetary"]]
@@ -157,9 +169,10 @@ for k in range(2, 9):
 kmeans_results_df = pd.DataFrame(kmeans_results)
 print(kmeans_results_df.to_string(index=False, float_format="%.4f"))
 
-# K=4 is retained for the final segmentation so the segment report
-# remains comparable with the existing assignment output.
+# K=4 is retained for the final segmentation because it provides
+# a useful balance of silhouette score and business interpretability.
 FINAL_K = 4
+
 kmeans = KMeans(
     n_clusters=FINAL_K,
     random_state=42,
@@ -196,11 +209,6 @@ frequency_ranked = sorted(
     reverse=True,
 )
 
-recency_ranked = sorted(
-    other_ids,
-    key=lambda sid: segment_summary.loc[sid, "mean_recency"],
-)
-
 segment_names = {premium_segment_id: "Premium"}
 
 if frequency_ranked:
@@ -234,8 +242,10 @@ segment_summary["segment_name"] = segment_summary.index.map(
 print("\nFINAL SEGMENT PROFILES")
 print(segment_summary.to_string(float_format="%.2f"))
 print("\nPremium segment ID:", premium_segment_id)
-print("Premium mean monetary value:",
-      round(segment_summary.loc[premium_segment_id, "mean_monetary"], 2))
+print(
+    "Premium mean monetary value:",
+    round(segment_summary.loc[premium_segment_id, "mean_monetary"], 2)
+)
 
 print("\nSuggested segment actions:")
 for sid, row in segment_summary.iterrows():
@@ -316,9 +326,10 @@ cancelled_rate = (
 
 features = cohort.set_index("customer_id").copy()
 
+# Predictive recency is also measured in whole days.
 features["recency"] = (
     LAPSE_CUTOFF - last_completed.reindex(features.index)
-).dt.total_seconds() / 86400
+).dt.days
 
 features["frequency"] = frequency.reindex(features.index)
 features["monetary"] = monetary.reindex(features.index)
@@ -362,7 +373,9 @@ y = features["lapsed"].astype(int)
 
 assert len(X) == len(y)
 assert X.columns.is_unique
-assert not X.isna().any().any(), "Model features contain missing values before preprocessing."
+assert not X.isna().any().any(), (
+    "Model features contain missing values before preprocessing."
+)
 assert "segment_name" not in X.columns
 assert "segment_id" not in X.columns
 assert "is_premium" not in X.columns
@@ -390,7 +403,10 @@ print("Test rows:", len(X_test))
 # The model pipeline is fitted only on training folds; the full-cohort mean is
 # reported for context and is never used to fit the predictive scaler.
 full_cohort_frequency_mean = float(X["frequency"].mean())
-print("Full-cohort frequency mean (descriptive only):", round(full_cohort_frequency_mean, 4))
+print(
+    "Full-cohort frequency mean (descriptive only):",
+    round(full_cohort_frequency_mean, 4)
+)
 
 baseline_pred = np.zeros(len(y_test), dtype=int)
 print("\nBASELINE: always predict not lapsed")
@@ -488,9 +504,14 @@ forest_numeric_pipeline = (
     .named_transformers_["numeric"]
 )
 learned_frequency_mean = float(
-    forest_numeric_pipeline.named_steps["scaler"].mean_[numeric_features.index("frequency")]
+    forest_numeric_pipeline.named_steps["scaler"].mean_[
+        numeric_features.index("frequency")
+    ]
 )
-print("Training-fitted frequency scaler mean:", round(learned_frequency_mean, 4))
+print(
+    "Training-fitted frequency scaler mean:",
+    round(learned_frequency_mean, 4)
+)
 
 # Choose by training-only cross-validation F1, not test-set metrics.
 if forest_grid.best_score_ >= log_grid.best_score_:
@@ -640,15 +661,19 @@ print(pd.Series(y_train_array).value_counts().sort_index().to_dict())
 print("Balanced training class counts:")
 print(pd.Series(balanced_y).value_counts().sort_index().to_dict())
 
-print("Original logistic precision / recall / F1:",
-      round(precision_score(y_test, log_pred, zero_division=0), 4),
-      round(recall_score(y_test, log_pred, zero_division=0), 4),
-      round(f1_score(y_test, log_pred, zero_division=0), 4))
+print(
+    "Original logistic precision / recall / F1:",
+    round(precision_score(y_test, log_pred, zero_division=0), 4),
+    round(recall_score(y_test, log_pred, zero_division=0), 4),
+    round(f1_score(y_test, log_pred, zero_division=0), 4)
+)
 
-print("Balanced logistic precision / recall / F1:",
-      round(precision_score(y_test, balanced_pred, zero_division=0), 4),
-      round(recall_score(y_test, balanced_pred, zero_division=0), 4),
-      round(f1_score(y_test, balanced_pred, zero_division=0), 4))
+print(
+    "Balanced logistic precision / recall / F1:",
+    round(precision_score(y_test, balanced_pred, zero_division=0), 4),
+    round(recall_score(y_test, balanced_pred, zero_division=0), 4),
+    round(f1_score(y_test, balanced_pred, zero_division=0), 4)
+)
 
 
 # ---------------------------------------------------------

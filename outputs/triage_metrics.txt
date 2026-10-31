@@ -1,4 +1,4 @@
-﻿PART C - SUPPORT TICKET TRIAGE METRICS
+PART C - SUPPORT TICKET TRIAGE METRICS
 
 Total tickets: 164
 Zero-shot classified: 147
@@ -6,15 +6,18 @@ Zero-shot correct: 126
 Zero-shot accuracy: 85.7143%
 Zero-shot total tokens: 12364
 Zero-shot tokens/classified: 84.11
+Zero-shot retry events: 19
 
 Few-shot classified: 147
 Few-shot correct: 147
 Few-shot accuracy: 100.0000%
 Few-shot total tokens: 21568
 Few-shot tokens/classified: 146.72
+Few-shot retry events: 19
 
 Budget cap used: 6000
 Budget-exhausted tickets: 80
+Budget demo actual tokens: 6038
 
 Redaction totals:
 email: 55

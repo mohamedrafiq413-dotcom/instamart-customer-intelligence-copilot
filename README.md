@@ -1,31 +1,33 @@
 # Instamart Customer Intelligence & Support Copilot
 
-## 1. Project Overview
+## Overview
 
-This project builds a customer intelligence and support copilot for a simulated Instamart business. It combines data analytics, machine learning, ticket classification, policy retrieval and a simulated refund agent.
+This project uses synthetic Instamart data to analyse customers and orders, predict customer churn, classify support tickets, retrieve company policies, and support refund decisions.
 
 **Technologies:** Python, Pandas, NumPy, SQLite, Scikit-learn, TF-IDF and Mock LLM.
 
-## 2. Setup and Reproduction
+## Reproduce
 
-**Requirements:** Python 3.11+, Git and VS Code.
+Run these commands from the project root in Windows PowerShell.
 
-### Install and activate environment (Windows PowerShell)
+1. Create and activate the environment:
 
 ```powershell
 py -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
 ```
 
-### Run the project
-
-Run the scripts from the project root in this order:
+2. Install dependencies and generate data:
 
 ```powershell
+python -m pip install -r requirements.txt
 python .\generate_data.py
+```
+
+3. Prepare and validate the data:
+
+```powershell
 python .\src\audit_data.py
 python .\src\clean_customers.py
 python .\src\clean_products.py
@@ -33,136 +35,116 @@ python .\src\clean_orders.py
 python .\src\validate_data.py
 python .\src\build_database.py
 python .\src\sql_analysis.py
+```
+
+4. Run customer analysis and prediction:
+
+```powershell
 python .\src\customer_intelligence.py
 python .\src\customer_insights.py
 python .\src\lapse_model.py
-python .\src\process_tickets.py
-python .\src\classify_tickets.py
+```
+
+5. Run ticket classification:
+
+```powershell
 python .\src\triage_pipeline.py
+```
+
+6. Run policy QA and refund-agent tests:
+
+```powershell
 python .\src\policy_qa.py
+python .\src\test_refund_rules.py
 python .\src\refund_agent.py --batch
 python .\src\refund_agent.py --demos
 python .\src\refund_agent.py --resume-demo
-python .\src\plan_execute_comparison.py
 ```
 
-The policy QA script opens an interactive session after evaluation. Type `exit` to finish.
+## Part A — Data Preparation and SQL
 
-**Validation:** 53 checks passed, 0 failed.
+- Raw orders: 13,084 rows, 119 duplicates and 656 pending rows.
+- Other raw order issues: 120 non-numeric amounts, 106 negative delivery times and 2,541 blank delivery times.
+- Raw customer issues: 61 blank ages, 6 invalid ages, 24 city spellings, 10 gender spellings and 30 blank genders.
+- Clean customers: 1,200; products: 40; orders: 12,309.
+- Final orders: 11,110 completed and 1,199 cancelled.
+- Completed-order revenue: **₹2,998,668.80**.
 
-## 3. Part A - Data Quality and SQL Analytics
+Customers were standardised by city and gender; invalid ages were replaced using city medians. Orders were deduplicated by keeping the latest record per order ID, missing amounts were calculated using product prices, and missing delivery times were filled for completed orders only.
 
-Generated data included 1,200 customers, 40 products, 13,084 raw orders and 164 support tickets.
+**Top-selling product:** Instant Noodles 4 Pack — 867 units.
 
-After cleaning, 12,309 orders remained:
-- 11,110 completed orders
-- 1,199 cancelled orders
+**Outputs:** `data/clean/`, `data/instamart.db`, `sql/queries.sql`.
 
-The SQLite database was created at `data/instamart.db`.
+## Part B — Customer Intelligence
 
-**Key findings:**
-- Completed-order revenue: ₹2,998,668.80
-- Top-selling product: Instant Noodles 4 Pack (867 units)
-- Seven SQL queries analysed revenue, customers, products and order trends.
+- Customers analysed: 1,200.
+- RFM customers: 1,175.
+- Customer segments: 4.
+- PCA explained variance: 85.23%.
+- Lapse cohort: 1,156; lapsed customers: 443 (38.32%).
+- Training rows: 924; test rows: 232.
 
-## 4. Part B - Customer Intelligence and Lapse Prediction
+Random Forest test results: accuracy 74.14%, precision 65.93%, recall 67.42% and F1 66.67%. Logistic Regression F1: 61.62%.
 
-Customer intelligence identified Regular, At Risk, High Value and No Completed Orders segments.
+**Outputs:** `customer_segments.csv`, `lapse_model.joblib`, `retention_list.csv`.
 
-RFM analysis grouped 1,175 customers into four clusters. The first two PCA components explained 85.23% of the variance.
+## Part C — Support Ticket Triage
 
-**Lapse prediction results:**
+- Tickets processed: 164; empty tickets: 4; long tickets: 4.
+- Zero-shot: 126/147 correct (85.7%).
+- Few-shot: 147/147 correct (100%).
+- Tokens: 12,364 zero-shot; 21,568 few-shot.
+- Transient failures recovered: 19.
+- PII redactions: 278; remaining matches: 0.
 
-| Model | Accuracy | Precision | Recall | F1-score |
-|---|---:|---:|---:|---:|
-| Logistic Regression | 69.40% | 59.38% | 64.04% | 61.62% |
-| Random Forest | 73.71% | 65.22% | 67.42% | 66.30% |
+**Final routing:**
 
-Random Forest was selected based on its higher cross-validation F1-score. Oversampling improved Logistic Regression recall to 85.39%.
+| Route | Tickets |
+|---|---:|
+| Support queue | 102 |
+| Security team | 34 |
+| Human review | 17 |
+| Premium desk | 11 |
 
-The trained model was saved and reloaded successfully. A retention list of the top 10 Premium test customers was also generated.
+The 6,000-token budget demonstration flagged 80 tickets. Actual usage was 6,038 because the budget is checked before each model call.
 
-**Main outputs:**
-- `outputs/customer_segments.csv`
-- `outputs/lapse_model.joblib`
-- `outputs/retention_list.csv`
+**Outputs:** `triage_results.csv`, `triage_budget_demo.csv`, `triage_metrics.txt`.
 
-## 5. Part C - Support Ticket Processing and Triage
+## Part D — Policy QA and Refund Agent
 
-The system processed 164 support tickets, including 160 classification-ready tickets and 4 manual-review tickets.
+Five policy documents were split into 15 chunks: refund 4, delivery 3, escalation 3, payment 3 and privacy 2.
 
-**Classification results:**
+Standard retrieval achieved 12/12 expected documents, 12/12 expected facts and 2/2 correct fallback answers. Zero-overlap retrieval achieved 10/12 expected facts. The missed facts concerned delivery delays over 45 minutes and payment deductions after failed payments.
 
-| Metric | Zero-shot | Few-shot |
-|---|---:|---:|
-| Classified tickets | 147 | 147 |
-| Correct predictions | 126 | 147 |
-| Accuracy | 85.71% | 100% |
-| Total tokens | 12,364 | 21,568 |
+Refund rules: only completed orders qualify; delivery over 45 minutes qualifies for a full refund; amounts above ₹1,000 require human escalation. Simulated requests are treated as being within the seven-day policy window.
 
-The pipeline includes classification, routing, retry handling and token-budget controls.
+**Refund scenarios:**
 
-**PII redaction:**
-- 55 email addresses
-- 91 phone numbers
-- 132 order IDs
-- 278 total replacements
-- Zero remaining PII matches
+| Scenario | Result | Calls | Tokens |
+|---|---|---:|---:|
+| S1 | REFUND ₹128.25 | 5 | 1,239 |
+| S2 | REFUND ₹135.00 | 5 | 1,239 |
+| S3 | ESCALATE ₹1,999.00 | 5 | 1,226 |
+| S4 | DENIED | 4 | 877 |
+| S5 | DENIED | 3 | 535 |
+| S6 | NOT_FOUND | 2 | 196 |
+| S7 | FALLBACK_MAX_ITERATIONS | 6 | 3,372 |
 
-The 6,000-token budget demonstration produced 80 budget-exhausted tickets and 6,038 aggregate tokens due to pre-call budget checking.
+**Safety demonstrations:**
+- Token limit: `FALLBACK_TOKEN_LIMIT`.
+- Timeout: `FALLBACK_TIMEOUT`.
 
-**Main outputs:**
-- `data/clean/processed_tickets.csv`
-- `data/clean/classified_tickets.csv`
-- `outputs/triage_results.csv`
-- `outputs/triage_budget_demo.csv`
-- `outputs/triage_metrics.txt`
+**Crash and resume:** `get_order` → `search_policy` → `calculate_refund` → `issue_refund`. Final result: REFUND ₹128.25, with exactly four tool executions.
 
-## 6. Part D - Policy QA and Simulated Refund Agent
+**ReAct versus Plan-and-Execute:** ReAct uses model calls to choose the next step from tool observations. Measured calls were S1: 5, S5: 3 and S6: 2. Plan-and-Execute can reduce calls by generating a complete plan first, but unexpected results such as missing or cancelled orders require validation and replanning. Its token usage was not measured here. ReAct is suitable for this workflow because order status and refund eligibility are checked before each financial action.
 
-### Policy QA
+**Outputs:** `agent_runs.jsonl`, `refund_ledger.jsonl`, policy evaluation files and `state/`.
 
-Five policy documents were divided into 40-word chunks with 10-word overlap. TF-IDF and cosine similarity retrieved the top three relevant chunks.
+## Limitations and Next Steps
 
-Evaluation covered 12 answerable and 2 unanswerable questions.
-
-| Metric | With overlap | Zero overlap |
-|---|---:|---:|
-| Expected facts found | 12/12 | 10/12 |
-| Correct fallback responses | 2/2 | 2/2 |
-
-### Refund Support Agent
-
-The agent uses five tools for order lookup, policy search, refund calculation, refund issuance and human escalation.
-
-Seven scenarios tested refunds, denials, escalation, missing orders and fallback handling. Additional tests covered:
-- Seven-day refund eligibility
-- Token-limit and timeout handling
-- Crash-resume functionality
-- Human-handoff summaries
-
-### ReAct vs Plan-and-Execute
-
-Both approaches were compared using three scenarios: refund, cancelled order and missing order. Both produced the expected outcomes in all three cases.
-
-ReAct used 5, 3 and 2 LLM calls respectively. Plan-and-Execute used one deterministic planning pass followed by 4, 2 and 1 tool executions. The comparison uses a rule-based baseline rather than an LLM-powered Plan-and-Execute model.
-
-**Main outputs:**
-- `outputs/policy_eval_results.csv`
-- `outputs/policy_eval_zero_overlap.csv`
-- `outputs/agent_runs.jsonl`
-- `outputs/refund_ledger.jsonl`
-- `outputs/react_vs_plan_execute.csv`
-- `state/` checkpoint files
-
-## 7. Limitations
-
-- The project uses simulated business data and an offline Mock LLM.
-- Delivery timestamps are estimated from order timestamps and delivery duration; batch refund-request dates are synthetic.
-- The refund ledger contains historical repeated events for some orders.
-- No real payments are issued.
-- Production deployment would require stronger transaction controls, monitoring and secure payment integration.
-
-## Conclusion
-
-This project demonstrates an end-to-end customer intelligence and support workflow using data analytics, machine learning, NLP, policy retrieval and simulated AI agent tools.
+- All data is synthetic.
+- The LLM is an offline mock model.
+- Model results need further validation before production use.
+- The retention list is illustrative, not a leakage-free evaluation.
+- Future work includes improved model testing, monitoring and stronger refund safeguards.

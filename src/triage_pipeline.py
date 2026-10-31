@@ -1,4 +1,3 @@
-
 """
 Instamart Capstone - Part C
 Support Ticket Triage with Guardrails
@@ -190,7 +189,7 @@ def is_empty(text):
 # 4. One ticket classification with transient retries
 # ---------------------------------------------------------
 
-def classify_one(redacted_text, system_prompt, rng):
+def classify_one(ticket_id, redacted_text, system_prompt, rng):
     """
     Classify a single redacted ticket.
 
@@ -270,8 +269,8 @@ def classify_one(redacted_text, system_prompt, rng):
             if attempt == MAX_RETRIES:
 
                 retry_logs.append(
-                    "Transient failure: maximum retries reached: "
-                    f"{exc}"
+                    f"Ticket {ticket_id}: transient failure; "
+                    f"maximum retries reached: {exc}"
                 )
 
                 return {
@@ -289,7 +288,8 @@ def classify_one(redacted_text, system_prompt, rng):
             )
 
             retry_logs.append(
-                f"Transient failure; retry number {attempt}; "
+                f"Ticket {ticket_id}: transient failure; "
+                f"retry number {attempt}; "
                 f"jitter wait {wait:.4f} seconds"
             )
 
@@ -443,6 +443,7 @@ def run_batch(
         else:
 
             result = classify_one(
+                ticket_id,
                 redacted_text,
                 prompt,
                 rng,

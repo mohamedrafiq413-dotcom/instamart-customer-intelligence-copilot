@@ -1,0 +1,4 @@
+scenario_id,expected_outcome,react_result,react_matches_expected,react_llm_calls,react_llm_tokens,react_tool_executions,plan_execute_result,plan_execute_matches_expected,plan_execute_planning_passes,plan_execute_llm_calls,plan_execute_llm_tokens,plan_execute_tool_executions,plan_execute_tools,planner_type
+S1,REFUND,REFUND,True,5,1239,4,REFUND,True,1,0,0,4,get_order;search_policy;calculate_refund;issue_refund,deterministic rule-based baseline
+S5,DENIED,DENIED,True,3,535,2,DENIED,True,1,0,0,2,get_order;search_policy,deterministic rule-based baseline
+S6,NOT_FOUND,NOT_FOUND,True,2,196,1,NOT_FOUND,True,1,0,0,1,get_order,deterministic rule-based baseline

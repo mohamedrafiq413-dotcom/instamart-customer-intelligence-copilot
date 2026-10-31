@@ -2,13 +2,14 @@
   "run_id": "demo-timeout",
   "scenario_id": "S1_TIMEOUT_DEMO",
   "user_message": "My order ORD-100048 reached me very late. I would like a refund.",
+  "request_datetime": "2025-04-04 23:44:44",
   "max_iterations": 6,
   "token_limit": 6000,
   "time_limit_seconds": 0.0,
   "messages": [
     {
       "role": "system",
-      "content": "AGENT\nYou are an Instamart refund support agent. Use tools to check the order and policy. Only completed orders qualify. A late-delivery refund requires delivery over 45 minutes. Refunds above INR 1000 require human approval. Never claim real money was transferred."
+      "content": "AGENT\nYou are an Instamart refund support agent. Use tools to check the order and policy. Only completed orders qualify. A late-delivery refund requires delivery over 45 minutes. Refunds above INR 1000 require human approval. Never claim real money was transferred. The backend verifies the seven-day request window using the supplied request timestamp and estimated delivery time."
     },
     {
       "role": "user",
@@ -21,5 +22,5 @@
   "step_number": 0,
   "tools_executed": [],
   "status": "FALLBACK_TIMEOUT",
-  "final_answer": "FALLBACK_TIMEOUT: The agent reached its time limit. Please hand this case to a human support agent."
+  "final_answer": "FALLBACK_TIMEOUT: The agent reached its time limit. No tools were completed before handoff. Please hand this case to a human support agent."
 }

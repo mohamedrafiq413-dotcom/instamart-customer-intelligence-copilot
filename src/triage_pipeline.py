@@ -1,3 +1,4 @@
+
 """
 Instamart Capstone - Part C
 Support Ticket Triage with Guardrails
@@ -21,7 +22,7 @@ import time
 import sys
 from pathlib import Path
 
-# Add the project root folder to Python's import path
+# Add the project root folder to Python's import path.
 ROOT = Path(__file__).resolve().parent.parent
 
 if str(ROOT) not in sys.path:
@@ -48,6 +49,9 @@ CATEGORIES = {"billing", "delivery", "technical", "fraud"}
 # Retry settings
 MAX_RETRIES = 3
 BASE_DELAY = 0.05
+
+# Token budget for the demonstration
+TOKEN_BUDGET = 6000
 
 # Assignment requires the exact patterns and replacement order.
 PII_PATTERNS = [
@@ -186,10 +190,91 @@ def is_empty(text):
 
 
 # ---------------------------------------------------------
-# 4. One ticket classification with transient retries
+# 4. Strict token reservation
 # ---------------------------------------------------------
 
-def classify_one(ticket_id, redacted_text, system_prompt, rng):
+def maximum_classification_call_tokens(messages):
+    """
+    Calculate a conservative token reservation for one
+    classification attempt using the supplied mock_llm.
+
+    The reservation includes:
+        1. All prompt messages.
+        2. The largest possible mock classification response.
+
+    The mock classifier can return:
+        - Valid category JSON.
+        - Invalid-category JSON.
+        - A non-JSON keyword response.
+
+    This function must be kept aligned with mock_llm.py
+    if the mock classifier's possible responses change.
+    """
+
+    prompt_tokens = sum(
+        mock_llm.est_tokens(
+            message.get("content")
+            or json.dumps(
+                message.get("tool_calls", ""),
+                default=str,
+            )
+        )
+        for message in messages
+    )
+
+    possible_responses = [
+        # Valid JSON responses.
+        json.dumps({
+            "category": category,
+            "reason": "keyword match",
+        })
+        for category in (
+            "billing",
+            "delivery",
+            "fraud",
+            "technical",
+        )
+    ]
+
+    # Invalid-category JSON response used by mock_llm.py.
+    possible_responses.append(
+        json.dumps({
+            "category": "shipping",
+            "reason": "parcel movement",
+        })
+    )
+
+    # Non-JSON responses used by mock_llm.py.
+    possible_responses.extend(
+        f"The customer appears to have a "
+        f"{category}-related problem."
+        for category in (
+            "billing",
+            "delivery",
+            "fraud",
+            "technical",
+        )
+    )
+
+    completion_reservation = max(
+        mock_llm.est_tokens(response)
+        for response in possible_responses
+    )
+
+    return prompt_tokens + completion_reservation
+
+
+# ---------------------------------------------------------
+# 5. One ticket classification with transient retries
+# ---------------------------------------------------------
+
+def classify_one(
+    ticket_id,
+    redacted_text,
+    system_prompt,
+    rng,
+    budget_remaining=None,
+):
     """
     Classify a single redacted ticket.
 
@@ -199,6 +284,13 @@ def classify_one(ticket_id, redacted_text, system_prompt, rng):
 
     Retry delay:
         BASE_DELAY * 2**retry_number * random.uniform(0.9, 1.15)
+
+    If a token budget is supplied, reserve enough tokens before
+    every model attempt. Never start an attempt that could exceed
+    the remaining budget.
+
+    In the supplied mock_llm.py, transient failures occur before
+    a response is generated and have zero reported token usage.
     """
 
     messages = [
@@ -212,7 +304,7 @@ def classify_one(ticket_id, redacted_text, system_prompt, rng):
         },
     ]
 
-    # Safety check: user message must contain only redacted ticket text.
+    # Safety check: user message must contain only redacted text.
     assert messages[-1]["content"] == redacted_text
 
     assert remaining_pii_count(
@@ -222,19 +314,72 @@ def classify_one(ticket_id, redacted_text, system_prompt, rng):
     retry_logs = []
     tokens_used = 0
 
-    # One initial attempt + three retries = four attempts maximum.
+    # Maximum token reservation for each attempt.
+    call_token_reservation = (
+        maximum_classification_call_tokens(messages)
+    )
+
+    # One initial attempt + three retries.
     for attempt in range(MAX_RETRIES + 1):
+
+        # -------------------------------------------------
+        # STRICT BUDGET CHECK BEFORE EVERY MODEL ATTEMPT
+        # -------------------------------------------------
+
+        if (
+            budget_remaining is not None
+            and call_token_reservation
+            > budget_remaining - tokens_used
+        ):
+
+            print(
+                f"Ticket {ticket_id}: budget exhausted; "
+                f"required reservation={call_token_reservation}; "
+                f"remaining budget={budget_remaining - tokens_used}"
+            )
+
+            return {
+                "category": None,
+                "status": "budget_exhausted",
+                "tokens_used": tokens_used,
+                "retry_logs": retry_logs,
+            }
 
         try:
             response = mock_llm.chat(messages)
 
-            # Record model token usage.
+            # Record actual model token usage.
             usage = getattr(response, "usage", None)
 
-            if usage is not None:
-                tokens_used += int(
-                    getattr(usage, "total_tokens", 0) or 0
+            if usage is None:
+                raise RuntimeError(
+                    "Mock LLM response did not provide token usage."
                 )
+
+            call_tokens = int(
+                getattr(usage, "total_tokens", 0) or 0
+            )
+
+            # Safety check: actual usage must not exceed
+            # the reservation calculated before this call.
+            if call_tokens > call_token_reservation:
+                raise RuntimeError(
+                    f"Ticket {ticket_id}: actual token usage "
+                    f"({call_tokens}) exceeded reservation "
+                    f"({call_token_reservation})."
+                )
+
+            # Second safety check against the remaining budget.
+            if (
+                budget_remaining is not None
+                and call_tokens > budget_remaining - tokens_used
+            ):
+                raise RuntimeError(
+                    f"Ticket {ticket_id}: actual token usage "
+                    "exceeded the remaining token budget."
+                )
+
+            tokens_used += call_tokens
 
             content = response.choices[0].message.content
 
@@ -302,7 +447,7 @@ def classify_one(ticket_id, redacted_text, system_prompt, rng):
 
 
 # ---------------------------------------------------------
-# 5. Load customer segments and route tickets
+# 6. Load customer segments and route tickets
 # ---------------------------------------------------------
 
 def load_segments():
@@ -366,7 +511,7 @@ def route_ticket(status, category, is_premium):
 
 
 # ---------------------------------------------------------
-# 6. Run a complete batch
+# 7. Run a complete batch
 # ---------------------------------------------------------
 
 def run_batch(
@@ -379,7 +524,11 @@ def run_batch(
     """
     Run a complete batch from a fresh mock state.
 
-    The token budget is checked before each model call.
+    When a budget is supplied:
+        - Reserve tokens before every model attempt.
+        - Include retry attempts in the reservation check.
+        - Never allow actual accumulated usage to exceed the cap.
+        - Route budget-exhausted tickets to human review.
     """
 
     mock_llm.reset()
@@ -442,11 +591,19 @@ def run_batch(
 
         else:
 
+            # Pass the remaining batch budget into the
+            # per-ticket classifier. It checks the maximum
+            # possible usage before every attempt.
             result = classify_one(
                 ticket_id,
                 redacted_text,
                 prompt,
                 rng,
+                budget_remaining=(
+                    None
+                    if budget is None
+                    else budget - total_tokens
+                ),
             )
 
             category = result["category"]
@@ -454,6 +611,14 @@ def run_batch(
             ticket_tokens = result["tokens_used"]
 
             total_tokens += ticket_tokens
+
+            # Final batch-level budget assertion.
+            if budget is not None:
+                assert total_tokens <= budget, (
+                    f"Token budget exceeded: "
+                    f"{total_tokens} > {budget}"
+                )
+
             retry_log_count += len(result["retry_logs"])
 
         # -------------------------------------------------
@@ -504,6 +669,12 @@ def run_batch(
         f"Found {pii_remaining} PII matches after redaction."
     )
 
+    # Final strict budget assertion.
+    if budget is not None:
+        assert total_tokens <= budget, (
+            f"Final token usage {total_tokens} exceeds budget {budget}."
+        )
+
     return {
         "rows": result_df,
         "total_tokens": total_tokens,
@@ -514,7 +685,7 @@ def run_batch(
 
 
 # ---------------------------------------------------------
-# 7. Accuracy and confusion table
+# 8. Accuracy and confusion table
 # ---------------------------------------------------------
 
 def calculate_metrics(result):
@@ -584,7 +755,7 @@ def save_final_csv(result, path):
 
 
 # ---------------------------------------------------------
-# 8. Main: compare prompts, demonstrate budget, save output
+# 9. Main: compare prompts, demonstrate budget, save output
 # ---------------------------------------------------------
 
 def main():
@@ -715,7 +886,7 @@ def main():
 
     print("\n--- ZERO-SHOT TOKEN BUDGET DEMO ---")
 
-    budget = 6000
+    budget = TOKEN_BUDGET
 
     demo = run_batch(
         tickets,
@@ -757,6 +928,12 @@ def main():
             ).sum()
         )
 
+    # Do not save a budget result that violates the cap.
+    assert demo["total_tokens"] <= budget, (
+        f"Budget demonstration exceeded its cap: "
+        f"{demo['total_tokens']} > {budget}"
+    )
+
     budget_path = OUTPUT_DIR / "triage_budget_demo.csv"
 
     save_final_csv(
@@ -767,6 +944,7 @@ def main():
     print(f"Budget cap: {budget}")
     print(f"Budget-exhausted tickets: {exhausted}")
     print(f"Actual tokens used: {demo['total_tokens']}")
+    print(f"Budget remaining: {budget - demo['total_tokens']}")
     print(f"Saved: {budget_path}")
 
     # -----------------------------------------------------
@@ -939,7 +1117,15 @@ def main():
         )
 
         report.write(
-            f"Budget demo actual tokens: {demo['total_tokens']}\n\n"
+            f"Budget demo actual tokens: {demo['total_tokens']}\n"
+        )
+
+        report.write(
+            f"Budget remaining: {budget - demo['total_tokens']}\n"
+        )
+
+        report.write(
+            "Budget enforcement: conservative pre-call reservation\n\n"
         )
 
         # PII metrics
@@ -992,7 +1178,7 @@ def main():
 
 
 # ---------------------------------------------------------
-# 9. Main execution
+# 10. Main execution
 # ---------------------------------------------------------
 
 if __name__ == "__main__":

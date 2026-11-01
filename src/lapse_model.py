@@ -1,4 +1,3 @@
-
 from pathlib import Path
 import warnings
 
@@ -97,7 +96,7 @@ print("Completed September orders:", len(september_completed))
 # 3. Whole-window RFM segmentation
 # ---------------------------------------------------------
 # RFM is calculated as of the fixed snapshot date.
-# This whole-window segment output is for reporting and routing.
+# This whole-window segment output is for descriptive reporting.
 # Segment labels are not used as predictive model features.
 #
 # Only customers with at least one completed order are included.
@@ -696,36 +695,174 @@ assert predictions_identical, "Reloaded model predictions differ!"
 
 
 # ---------------------------------------------------------
-# 11. Build the Premium retention list
+# 11. Build a leakage-aware Premium retention list
 # ---------------------------------------------------------
-# Premium is defined using whole-window RFM. It includes September
-# information and is therefore a post-hoc reporting label, not a
-# leakage-free feature or independent evaluation cohort.
-premium_ids = set(
-    rfm.loc[rfm["is_premium"], "customer_id"].astype(str)
+# The main customer_segments.csv remains a descriptive snapshot as of
+# October 1, 2025. Do NOT use that whole-window Premium label to select
+# customers for a September lapse campaign because it includes September
+# activity, which is also used to define the lapse outcome.
+#
+# Instead, build a separate Premium audience using only completed orders
+# strictly before September 1, 2025. This keeps the campaign segmentation
+# aligned with the information available at prediction time.
+
+pre_cutoff_rfm = (
+    completed_pre.groupby("customer_id")
+    .agg(
+        last_order=("order_ts", "max"),
+        frequency=("order_id", "nunique"),
+        monetary=("order_amount", "sum"),
+    )
+    .reset_index()
 )
 
-test_ids = pd.Series(id_test.astype(str), index=X_test.index)
-test_probabilities = selected_model.predict_proba(X_test)[:, 1]
+pre_cutoff_rfm["recency"] = (
+    LAPSE_CUTOFF - pre_cutoff_rfm["last_order"]
+).dt.days
 
-retention = pd.DataFrame({
-    "customer_id": test_ids.to_numpy(),
-    "lapse_probability": test_probabilities,
+pre_cutoff_rfm = pre_cutoff_rfm[
+    ["customer_id", "recency", "frequency", "monetary"]
+].copy()
+
+assert not pre_cutoff_rfm.empty, (
+    "Cannot create a pre-cutoff Premium segment: no completed orders found."
+)
+assert pre_cutoff_rfm["customer_id"].is_unique, (
+    "Pre-cutoff RFM must contain one row per customer."
+)
+assert pre_cutoff_rfm[["recency", "frequency", "monetary"]].notna().all().all(), (
+    "Pre-cutoff RFM contains missing values."
+)
+
+# Fit a separate RFM scaler and K-means model using only pre-cutoff data.
+pre_cutoff_rfm_columns = ["recency", "frequency", "monetary"]
+pre_cutoff_scaler = StandardScaler()
+pre_cutoff_scaled = pre_cutoff_scaler.fit_transform(
+    pre_cutoff_rfm[pre_cutoff_rfm_columns]
+)
+
+pre_cutoff_kmeans = KMeans(
+    n_clusters=FINAL_K,
+    random_state=42,
+    n_init=10,
+)
+pre_cutoff_rfm["segment_id"] = pre_cutoff_kmeans.fit_predict(
+    pre_cutoff_scaled
+)
+
+# Define Premium as the pre-cutoff cluster with the highest mean spend.
+pre_cutoff_segment_summary = (
+    pre_cutoff_rfm.groupby("segment_id")
+    .agg(
+        customers=("customer_id", "size"),
+        mean_recency=("recency", "mean"),
+        mean_frequency=("frequency", "mean"),
+        mean_monetary=("monetary", "mean"),
+    )
+    .sort_index()
+)
+
+pre_cutoff_premium_segment_id = int(
+    pre_cutoff_segment_summary["mean_monetary"].idxmax()
+)
+
+pre_cutoff_rfm["segment_name"] = np.where(
+    pre_cutoff_rfm["segment_id"].eq(pre_cutoff_premium_segment_id),
+    "Premium",
+    "Other",
+)
+
+premium_ids_pre_cutoff = set(
+    pre_cutoff_rfm.loc[
+        pre_cutoff_rfm["segment_id"].eq(pre_cutoff_premium_segment_id),
+        "customer_id",
+    ].astype(str)
+)
+
+print("\nPRE-CUTOFF PREMIUM SEGMENT")
+print("Premium segment ID:", pre_cutoff_premium_segment_id)
+print(
+    pre_cutoff_segment_summary.to_string(float_format="%.2f")
+)
+print("Premium customers before September:", len(premium_ids_pre_cutoff))
+
+# Score the untouched test customers with the already-selected model.
+# The actual September outcomes are kept only in the evaluation file.
+test_predictions = pd.DataFrame({
+    "customer_id": pd.Series(id_test).astype(str).to_numpy(),
+    "lapse_probability": selected_model.predict_proba(X_test)[:, 1],
     "actually_lapsed": y_test.to_numpy(),
 })
 
-retention = (
-    retention[retention["customer_id"].isin(premium_ids)]
-    .sort_values("lapse_probability", ascending=False)
+# Select only customers who were Premium based on pre-September data.
+# Rank the eligible test customers by predicted lapse probability.
+retention_evaluation = (
+    test_predictions[
+        test_predictions["customer_id"].isin(premium_ids_pre_cutoff)
+    ]
+    .sort_values(
+        "lapse_probability",
+        ascending=False,
+        kind="stable",
+    )
     .head(10)
+    .copy()
 )
 
-retention.to_csv(OUTPUTS / "retention_list.csv", index=False)
+# Add pre-cutoff RFM details for campaign context.
+pre_cutoff_lookup = pre_cutoff_rfm[
+    ["customer_id", "recency", "frequency", "monetary"]
+].copy()
+pre_cutoff_lookup["customer_id"] = (
+    pre_cutoff_lookup["customer_id"].astype(str)
+)
 
-print("\nRetention list saved:", OUTPUTS / "retention_list.csv")
-print("Premium test customers listed:", len(retention))
+retention_evaluation = retention_evaluation.merge(
+    pre_cutoff_lookup,
+    on="customer_id",
+    how="left",
+    validate="one_to_one",
+)
+
+# Operational list: do not include the actual September outcome.
+retention = retention_evaluation.drop(
+    columns=["actually_lapsed"]
+).copy()
+
+retention.to_csv(
+    OUTPUTS / "retention_list.csv",
+    index=False,
+)
+
+# Retrospective evaluation: actual labels are stored separately and must
+# not be used as operational campaign-selection information.
+retention_evaluation.to_csv(
+    OUTPUTS / "retention_list_evaluation.csv",
+    index=False,
+)
+
+print("\nOperational retention list saved:", OUTPUTS / "retention_list.csv")
 print(
-    "Truly lapsed customers in retention list:",
-    int(retention["actually_lapsed"].sum()),
+    "Retention evaluation saved:",
+    OUTPUTS / "retention_list_evaluation.csv",
 )
+print("Premium test customers listed:", len(retention))
+
+if len(retention_evaluation):
+    print(
+        "Actually lapsed customers in selected top 10 (retrospective only):",
+        int(retention_evaluation["actually_lapsed"].sum()),
+    )
+    print(
+        "Top-10 retrospective lapse hit rate (%):",
+        round(
+            100 * retention_evaluation["actually_lapsed"].mean(),
+            2,
+        ),
+    )
+else:
+    print(
+        "No pre-cutoff Premium customers were present in the held-out test set."
+    )
+
 print("\nPart B model script finished.")

@@ -1,10 +1,10 @@
-﻿============================================================
+============================================================
 INSTAMART CUSTOMER INTELLIGENCE SUMMARY
 ============================================================
 
 Total customers analyzed: 1200
 Total completed orders: 11110
-Total recorded completed-order spending: â‚¹2,998,668.80
+Total recorded completed-order spending: ₹2,998,668.80
 
 CUSTOMER SEGMENT SUMMARY
 ------------------------------------------------------------

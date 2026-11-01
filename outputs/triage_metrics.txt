@@ -16,8 +16,10 @@ Few-shot tokens/classified: 146.72
 Few-shot retry events: 19
 
 Budget cap used: 6000
-Budget-exhausted tickets: 80
-Budget demo actual tokens: 6038
+Budget-exhausted tickets: 81
+Budget demo actual tokens: 5957
+Budget remaining: 43
+Budget enforcement: conservative pre-call reservation
 
 Redaction totals:
 email: 55

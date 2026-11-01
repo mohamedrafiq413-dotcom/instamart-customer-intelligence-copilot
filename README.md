@@ -2,42 +2,37 @@
 
 ## Overview
 
-This project uses synthetic Instamart data to analyse customers and orders, predict customer churn, classify support tickets, retrieve company policies, and support refund decisions.
+An end-to-end data analytics and AI support automation prototype using synthetic Instamart data. It covers customer analytics, churn prediction, ticket classification, policy retrieval and refund assistance.
 
 **Technologies:** Python, Pandas, NumPy, SQLite, Scikit-learn, TF-IDF and Mock LLM.
 
 ## Reproduce
 
-Run these commands from the project root in Windows PowerShell.
+Run from the project root in Windows PowerShell.
 
-### 1. Create and activate the environment
+**1. Create environment and install dependencies**
 
 ```powershell
 py -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 .\.venv\Scripts\Activate.ps1
-```
-
-### 2. Install dependencies and generate data
-
-```powershell
 python -m pip install -r requirements.txt
-python .\generate_data.py
 ```
 
-### 3. Prepare and validate the data
+**2. Generate and prepare data**
 
 ```powershell
+python .\generate_data.py
 python .\src\audit_data.py
 python .\src\clean_customers.py
 python .\src\clean_products.py
 python .\src\clean_orders.py
-python .\src\validate_data.py
 python .\src\build_database.py
+python .\src\validate_data.py
 python .\src\sql_analysis.py
 ```
 
-### 4. Run customer analysis and prediction
+**3. Run customer intelligence**
 
 ```powershell
 python .\src\customer_intelligence.py
@@ -45,13 +40,13 @@ python .\src\customer_insights.py
 python .\src\lapse_model.py
 ```
 
-### 5. Run ticket classification
+**4. Run ticket triage**
 
 ```powershell
 python .\src\triage_pipeline.py
 ```
 
-### 6. Run policy QA and refund-agent tests
+**5. Run policy QA and refund agent**
 
 ```powershell
 python .\src\policy_qa.py
@@ -61,68 +56,121 @@ python .\src\refund_agent.py --demos
 python .\src\refund_agent.py --resume-demo
 ```
 
-Type `exit` when the interactive policy QA prompt appears.
+Type `exit` to leave the interactive policy QA prompt. The supplied `generate_data.py` and `mock_llm.py` are retained unmodified.
 
 ## Part A — Data Preparation and SQL
 
-- Raw orders: 13,084 rows, 119 exact duplicates and 656 pending orders.
-- Other raw order issues: 120 invalid or missing amounts, 106 negative delivery times and 2,541 blank delivery times.
-- Raw customer issues: 61 blank ages, 6 ages outside the 10–100 range, 24 city spellings, 10 nonblank gender spellings and 30 blank genders.
-- Clean customers: 1,200; products: 40; orders: 12,309.
-- Final orders: 11,110 completed and 1,199 cancelled.
-- Completed-order revenue: **₹2,998,668.80**.
+**Raw data audit:**
+- Customers: 1,200 rows; 61 missing ages, 6 ages outside 10–100, 24 city spellings, 10 nonblank gender spellings and 30 missing genders.
+- Products: 40 rows, with no missing values or exact duplicate rows.
+- Orders: 13,084 rows; 119 exact duplicates, 656 pending orders, 120 invalid or missing amounts, 106 negative delivery times and 2,541 blank delivery times.
+- Tickets: 164 rows, including 4 missing messages.
+- Policy evaluation: 14 questions; 2 missing expected facts.
+- Agent scenarios: 7 rows.
 
-Customers were standardised by city and gender. Invalid or missing ages were handled using city medians. Orders were deduplicated by retaining the latest record per order ID. Missing amounts were calculated using product prices, while missing delivery times were filled only for completed orders.
+**Cleaning results:**
+- Customers: 1,200; products: 40; orders: 12,309.
+- Orders: 11,110 completed and 1,199 cancelled.
+- No pending orders or missing completed-order amounts.
+- Completed revenue: **₹2,998,668.80**.
+- Data validation: **53 passed, 0 failed**.
 
-Data validation completed with **53 checks passed and 0 failures**.
+Customer cities and genders were standardised, and invalid or missing ages were handled using city medians. Orders were deduplicated by retaining the latest record per order ID. Missing amounts were calculated using product prices; missing delivery times were filled only for completed orders.
 
-Seven SQL analyses and pandas summaries were performed, including city/category revenue, customer spending, daily running revenue, outlier analysis and numeric correlations.
+**SQL and pandas analysis:**
+Seven SQL queries returned 30, 30, 11, 25, 550, 1,175 and 183 rows respectively. The analysis covered customer spending, city/category revenue, products, customer ranking and daily running revenue.
 
-**Top-selling product:** Instant Noodles 4 Pack — 867 units.
+- Top-selling product: Instant Noodles 4 Pack — **867 units**.
+- Highest city/category revenue: Bengaluru / Electronics — **₹233,909.45**.
+- City revenue: Hyderabad ₹528,589.90; Bengaluru ₹523,643.40; Delhi ₹502,829.80; Pune ₹500,918.05; Mumbai ₹479,058.50; Chennai ₹463,629.15.
+- Completed order amount: mean ₹269.91; median ₹135.00; skewness 4.61.
+- Interquartile range: ₹64.80–₹297.00; upper outlier fence ₹645.30; 897 upper outliers and 0 lower outliers.
+- Largest absolute pairwise correlation: order amount versus discount percentage, **−0.095**. Correlation does not establish causation.
+- Q6 produced 8 differences between RANK and ROW_NUMBER. Q7 covered 183 daily rows and finished at cumulative revenue of ₹2,998,668.80.
 
 **Outputs:** `data/clean/`, `data/instamart.db`, `sql/queries.sql`.
 
 ## Part B — Customer Intelligence
 
-- Customers analysed: 1,200.
-- RFM customers: 1,175.
-- Customer segments: 4.
-- PCA explained variance: 85.23%.
-- Lapse cohort: 1,156.
-- Lapsed customers: 443 (38.32%).
-- Training rows: 924; test rows: 232.
+Customer analysis covered 1,200 customers. Initial customer segments were Regular 633, At Risk 301, High Value 241 and No Completed Orders 25.
 
-### Lapse prediction results
+**RFM segmentation:**
+- RFM customers: 1,175.
+- K-means clusters: 4.
+- PCA explained variance: PC1 63.43%, PC2 21.80%, cumulative 85.23%.
+
+| K | Inertia | Silhouette |
+|---:|---:|---:|
+| 2 | 1820.7606 | 0.4650 |
+| 3 | 1268.2346 | 0.4452 |
+| 4 | 743.0711 | 0.5255 |
+| 5 | 617.3666 | 0.4805 |
+| 6 | 503.1706 | 0.4819 |
+| 7 | 408.4605 | 0.4163 |
+| 8 | 366.5035 | 0.4123 |
+
+| Segment | Customers | Mean recency (days) | Mean frequency | Mean monetary (₹) |
+|---|---:|---:|---:|---:|
+| Recently Active | 436 | 28.86 | 3.77 | 1,057.62 |
+| Premium | 138 | 24.12 | 6.77 | 7,129.70 |
+| Frequent | 419 | 8.77 | 19.40 | 3,410.02 |
+| Developing | 182 | 109.04 | 2.20 | 685.99 |
+
+**Lapse prediction:**
+- Snapshot: October 1, 2025; prediction cutoff: September 1, 2025.
+- Cohort: 1,156; lapsed: 443 (38.32%).
+- Training: 924; test: 232.
+- Baseline accuracy: 61.64%; lapsed-class precision, recall and F1: 0%.
 
 | Metric | Logistic Regression | Random Forest |
 |---|---:|---:|
 | Accuracy | 69.40% | 73.71% |
 | Precision | 59.38% | 65.22% |
 | Recall | 64.04% | 67.42% |
-| F1-score | 61.62% | 66.30% |
+| F1 | 61.62% | 66.30% |
 
-Random Forest was selected using training cross-validation F1 of 0.6869. The selected model was saved and successfully reloaded with identical test predictions.
+Confusion matrices, with rows representing actual classes and columns predicted classes (not lapsed, lapsed):
 
-A balanced Logistic Regression experiment achieved 85.39% recall and 69.41% F1.
+```text
+Logistic Regression: [[104, 39],
+                      [ 32, 57]]
 
-### Retention list
+Random Forest:       [[111, 32],
+                      [ 29, 60]]
+```
 
-The operational Premium retention list uses RFM segmentation based only on completed orders before September 1, 2025. Customers are ranked using predicted lapse probabilities.
+Best parameters: Logistic Regression `C=10`; Random Forest `max_depth=8`, `min_samples_leaf=10`. Cross-validation F1: 0.6565 and 0.6869 respectively. Random Forest was selected using training cross-validation.
 
-The top 10 customers and their retrospective September outcomes are stored separately. In the tested sample, 2 of the selected 10 were actually lapsed. This is a small-sample evaluation, not a guarantee of campaign performance.
+The balanced Logistic Regression experiment achieved 85.39% recall and 69.41% F1, compared with 64.04% recall and 61.62% F1 before balancing.
+
+**Retention list:** Premium customers for the operational list are identified using pre-September RFM, avoiding September information in audience selection. The top 10 test customers are ranked by predicted lapse probability. Actual September outcomes are stored separately; 2 of the 10 were retrospectively labelled lapsed. This small sample is not a guarantee of campaign performance.
 
 **Outputs:** `outputs/customer_segments.csv`, `outputs/lapse_model.joblib`, `outputs/retention_list.csv`, `outputs/retention_list_evaluation.csv`.
 
 ## Part C — Support Ticket Triage
 
-- Tickets processed: 164; empty tickets: 4; long tickets: 4.
-- Zero-shot: 126/147 correct (85.7%).
-- Few-shot: 147/147 correct (100%).
-- Tokens: 12,364 zero-shot; 21,568 few-shot.
-- Transient failures recovered: 19.
-- PII redactions: 278; remaining matches: 0.
+- Tickets: 164; empty: 4; long: 4.
+- Zero-shot: 147 classified, 126 correct, **85.7% accuracy**, 12,364 tokens.
+- Few-shot: 147 classified, 147 correct, **100% accuracy**, 21,568 tokens.
+- Tokens per classified ticket: 84.11 zero-shot and 146.72 few-shot.
+- Recovered transient failures: 19 per full run.
 
-### Final routing
+Zero-shot confusion matrix:
+
+```text
+                 Predicted
+Actual        billing delivery fraud technical
+billing           38       0     0       0
+delivery           0      36     0       0
+fraud             11       0    23       0
+technical         10       0     0      29
+```
+
+Classification statuses per unrestricted run: 135 classified JSON, 12 classified keyword, 9 invalid output, 4 skipped empty and 4 flagged long.
+
+**PII redaction:** 55 email, 91 phone and 132 order ID matches; 278 total redactions and 0 remaining matches.
+
+**Final routing:**
 
 | Route | Tickets |
 |---|---:|
@@ -132,40 +180,36 @@ The top 10 customers and their retrospective September outcomes are stored separ
 | Premium desk | 11 |
 | **Total** | **164** |
 
-### Strict token-budget demonstration
+**Strict token-budget demonstration:**
 
-The token budget is capped at **6,000 tokens**. A conservative pre-call reservation checks that enough budget remains before every model attempt, including retries.
+The configured budget is 6,000 tokens. Conservative pre-call token reservation includes possible responses and retry attempts.
 
-- Configured budget: 6,000 tokens.
-- Actual usage: 5,957 tokens.
+- Actual usage: **5,957 tokens**.
 - Remaining budget: 43 tokens.
 - Budget-exhausted tickets: 81.
+- Budget-demo statuses: 66 classified JSON, 5 classified keyword, 81 budget exhausted, 4 skipped empty, 4 flagged long and 4 invalid output.
 
-Budget-exhausted tickets are routed to human review. The unrestricted zero-shot and few-shot classification results remained unchanged after the budget correction.
+Budget-exhausted tickets are routed to human review. Unrestricted classification results remain unchanged. The strict reservation is designed for the supplied mock LLM and its token estimator.
 
 **Outputs:** `outputs/triage_results.csv`, `outputs/triage_budget_demo.csv`, `outputs/triage_metrics.txt`.
 
 ## Part D — Policy QA and Refund Agent
 
-Five policy documents were split into 15 chunks using 40-word chunks with 10-word overlap: refund 4, delivery 3, escalation 3, payment 3 and privacy 2.
+Five policy documents were divided into 15 chunks using 40-word chunks with 10-word overlap: refund 4, delivery 3, escalation 3, payment 3 and privacy 2.
 
-### Policy retrieval evaluation
+**Policy retrieval evaluation:**
 
-| Evaluation | Standard retrieval | Zero-overlap retrieval |
+| Evaluation | Standard retrieval | Zero-overlap |
 |---|---:|---:|
 | Expected documents found | 12/12 | 12/12 |
 | Expected facts found | 12/12 | 10/12 |
 | Correct fallback answers | 2/2 | 2/2 |
 
-The two zero-overlap fact misses concerned delivery delays over 45 minutes and payment deductions after failed payments.
+The zero-overlap misses concerned delivery delays over 45 minutes and payment deductions after failed payments.
 
-### Refund rules
+**Refund rules:** Only completed orders qualify. Delivery over 45 minutes qualifies for a full refund. Refunds above ₹1,000 require human escalation. Seven-day eligibility tests cover requests within the window, the exact seven-day boundary, expired requests, missing dates, delivery validation, refund recording and high-value escalation. All 7 tests passed.
 
-Only completed orders qualify for refunds. Delivery times over 45 minutes qualify for a full refund. Refund amounts above ₹1,000 require human escalation.
-
-Seven-day refund eligibility tests cover within-window requests, the exact seven-day boundary, expired requests, missing dates, delivery-time validation, refund recording and high-value escalation.
-
-### Refund scenarios
+**Refund scenarios:**
 
 | Scenario | Result | Calls | Tokens |
 |---|---|---:|---:|
@@ -177,26 +221,18 @@ Seven-day refund eligibility tests cover within-window requests, the exact seven
 | S6 | NOT_FOUND | 2 | 196 |
 | S7 | FALLBACK_MAX_ITERATIONS | 6 | 3,372 |
 
-### Safety and recovery demonstrations
+Token-limit and timeout demonstrations produced `FALLBACK_TOKEN_LIMIT` and `FALLBACK_TIMEOUT`.
 
-- Token-limit fallback: `FALLBACK_TOKEN_LIMIT`.
-- Timeout fallback: `FALLBACK_TIMEOUT`.
-- Crash and resume: `get_order` → `search_policy` → `calculate_refund` → `issue_refund`.
-- Final resumed result: REFUND ₹128.25.
-- Completed tool executions across crash/resume: four, without repeating completed actions.
+**Crash and resume:** `get_order` → `search_policy` → `calculate_refund` → `issue_refund`. The resumed result was REFUND ₹128.25, with 4 tool executions and no repeated completed actions.
 
-### ReAct versus Plan-and-Execute
+**ReAct versus Plan-and-Execute:** ReAct selects each next step from tool observations. Measured calls were S1: 5, S5: 3 and S6: 2. Plan-and-Execute can plan ahead, but unexpected outcomes such as missing or cancelled orders require validation and replanning. Its token usage was not measured. ReAct supports this workflow by checking order status and refund eligibility before financial actions.
 
-ReAct uses model calls to select the next step based on tool observations. Measured calls included S1: 5, S5: 3 and S6: 2. Plan-and-Execute can reduce calls by generating a plan first, but unexpected outcomes such as missing or cancelled orders require validation and replanning. Plan-and-Execute token usage was not measured in this project.
-
-ReAct is suitable for this workflow because order status and refund eligibility are checked before each financial action.
-
-**Outputs:** `outputs/agent_runs.jsonl`, `outputs/refund_ledger.jsonl`, `outputs/policy_eval_results.csv`, `outputs/policy_eval_zero_overlap.csv` and `state/`.
+**Outputs:** `outputs/agent_runs.jsonl`, `outputs/refund_ledger.jsonl`, `outputs/policy_eval_results.csv`, `outputs/policy_eval_zero_overlap.csv`, `outputs/react_vs_plan_execute.csv`, `state/`.
 
 ## Limitations and Next Steps
 
-- All project data is synthetic.
-- The LLM is an offline mock model, not a live external AI integration.
-- Model results require further validation before production use.
-- The retention list is a prototype campaign output evaluated on a small test sample.
-- Future improvements include broader model validation, monitoring, real-world data evaluation and stronger refund safeguards.
+- All data is synthetic.
+- The LLM is an offline mock, not a live external AI integration.
+- Model results require broader validation before production use.
+- The retention list is a prototype campaign output evaluated on 10 test customers.
+- Future work includes external model integration, monitoring, real-world evaluation and stronger refund safeguards.
